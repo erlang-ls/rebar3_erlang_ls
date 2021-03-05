@@ -1,18 +1,8 @@
 {"1.2.0",
-[{<<"cowlib">>,{pkg,<<"cowlib">>,<<"2.3.0">>},0},
- {<<"erlang_subgraph_compile">>,
-  {git,"https://github.com/ferd/erl_subgraph_compile.git",
-       {ref,"344c40e856ab88ececfde262f6fd67cdc354e6cf"}},
-  0},
- {<<"jsx">>,{pkg,<<"jsx">>,<<"2.9.0">>},0},
- {<<"redbug">>,{pkg,<<"redbug">>,<<"2.0.2">>},0}]}.
+[{<<"jsx">>,{pkg,<<"jsx">>,<<"2.9.0">>},0}]}.
 [
 {pkg_hash,[
- {<<"cowlib">>, <<"BBD58EF537904E4F7C1DD62E6AA8BC831C8183CE4EFA9BD1150164FE15BE4CAA">>},
- {<<"jsx">>, <<"D2F6E5F069C00266CAD52FB15D87C428579EA4D7D73A33669E12679E203329DD">>},
- {<<"redbug">>, <<"10CB89FF2619374FC11F11DE4283BE390B881773864098C67148741659137B01">>}]},
+ {<<"jsx">>, <<"D2F6E5F069C00266CAD52FB15D87C428579EA4D7D73A33669E12679E203329DD">>}]},
 {pkg_hash_ext,[
- {<<"cowlib">>, <<"D69585839B7354141E05E9687490E1C75D4DEA82EE77A4FF904EA5198B94D89B">>},
- {<<"jsx">>, <<"8EE1DB1CABAFDD578A2776A6AAAE87C2A8CE54B47B59E9EC7DAB5D7EB71CD8DC">>},
- {<<"redbug">>, <<"2930A6E79D4A2AFE40B4A09182C4ABB2055FA1954300C951FCD3557424B4A0C7">>}]}
+ {<<"jsx">>, <<"8EE1DB1CABAFDD578A2776A6AAAE87C2A8CE54B47B59E9EC7DAB5D7EB71CD8DC">>}]}
 ].

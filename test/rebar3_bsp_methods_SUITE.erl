@@ -100,7 +100,7 @@ buildtarget_sources(_Config) ->
   Params = #{ targets => [<<"default">>] },
   Result = rebar3_bsp_agent:handle_request(<<"buildTarget/sources">>, Params),
   {ok, Cwd} = file:get_cwd(),
-  ?assertEqual(#{ items => [filename:join([Cwd, "_build", "default", "lib", "sample"])] }, Result),
+  ?assertEqual(#{ items => [Cwd] }, Result),
   ok.
 
 -spec buildtarget_dependencysources(config()) -> ok.

@@ -22,6 +22,7 @@
 %%==============================================================================
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include("rebar3_bsp.hrl").
 
 %%==============================================================================
 %% Types
@@ -67,10 +68,10 @@ all() ->
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
   Result = rebar3_bsp_agent:handle_request(<<"build/initialize">>, #{}),
-  ?assertEqual( #{ bspVersion => <<"2.0.0">>
+  ?assertEqual( #{ bspVersion => rebar3_bsp_connection:version(?BSP_APPLICATION)
                  , capabilities => #{}
                  , displayName => <<"rebar3_bsp">>
-                 , version => <<"0.1.0">>
+                 , version => rebar3_bsp_connection:version(rebar)
                  }, Result),
   ok.
 

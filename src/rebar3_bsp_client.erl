@@ -20,7 +20,7 @@
 %%==============================================================================
 %% Erlang API
 -export([ start_link/1
-        , start_link/3
+        , start_link/2
         , stop/0
         ]).
 
@@ -53,6 +53,7 @@
                , notifications = []
                , requests      = []
                , port          :: port()
+               , buffer        = <<>>
                }).
 
 %%==============================================================================
@@ -67,13 +68,13 @@
 %%==============================================================================
 -spec start_link(string()) -> {ok, pid()}.
 start_link(RootPath) ->
-  {ok, Executable, Args, Env} = rebar3_bsp_connection:discover(RootPath),
-  start_link(Executable, Args, Env).
+  {ok, Executable, Args} = rebar3_bsp_connection:discover(RootPath),
+  start_link(Executable, Args).
 
--spec start_link(string(), [string()], [#{string() := string()}]) ->
+-spec start_link(string(), [string()]) ->
         {ok, pid()}.
-start_link(Executable, Args, Env) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, {Executable, Args, Env}, []).
+start_link(Executable, Args) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, {Executable, Args}, []).
 
 -spec stop() -> ok.
 stop() ->
@@ -113,10 +114,10 @@ build_publish_diagnostics(Params) ->
 %%==============================================================================
 %% gen_server Callback Functions
 %%==============================================================================
--spec init({string(), [string()], [{string(), string()}]}) -> {ok, state()}.
-init({Executable, Args, Env}) ->
+-spec init({string(), [string()]}) -> {ok, state()}.
+init({Executable, Args}) ->
   process_flag(trap_exit, true),
-  Opts = [{args, Args}, use_stdio, binary, {env, Env}],
+  Opts = [{args, Args}, use_stdio, binary],
   Port = open_port({spawn_executable, Executable}, Opts),
   {ok, #state{port = Port}}.
 
@@ -164,14 +165,17 @@ handle_info({Port, {data, Data}}, #state{port = Port} = State) ->
   #state{ pending = Pending0
         , notifications = Notifications0
         , requests = Requests0
+        , buffer = Buffer
         } = State,
-  {ok, Responses, _Buffer} = rebar3_bsp_jsonrpc:decode_packets(Data),
+  AllData = <<Buffer/binary, Data/binary>>,
+  {ok, Responses, RestData} = rebar3_bsp_jsonrpc:decode_packets(AllData),
   %% TODO: Refactor
   {Pending, Notifications, Requests}
     = do_handle_messages(Responses, Pending0, Notifications0, Requests0),
   {noreply, State#state{ pending = Pending
                        , notifications = Notifications
                        , requests = Requests
+                       , buffer = RestData
                        }};
 handle_info(_Request, State) ->
   {noreply, State}.

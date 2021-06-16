@@ -4,6 +4,9 @@
 -define(JSONRPC_VSN, <<"2.0">>).
 -define(BSP_VSN, <<"2.0.0">>).
 
+-define(BSP_APPLICATION, rebar3_bsp).
+-define(BSP_LAUNCHER, "rebar3_bsp_launcher.sh").
+
 -define(SOURCE_ITEM_KIND_FILE, 1).
 -define(SOURCE_ITEM_KIND_DIR, 2).
 

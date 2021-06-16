@@ -17,7 +17,7 @@
         {initializeBuildResult(), rebar3_state:t()}.
 build_initialize(_Params, State) ->
   Result = #{ displayName => <<"rebar3_bsp">>
-            , version => version()
+            , version => rebar3_bsp_connection:version(?BSP_APPLICATION)
             , bspVersion => ?BSP_VSN
             , capabilities => #{}
             },
@@ -72,11 +72,6 @@ custom_format(Params, State) ->
   end.
 
 %% Internal Functions
-
--spec version() -> binary().
-version() ->
-  {ok, Vsn} = application:get_key(rebar3_bsp, vsn),
-  list_to_binary(Vsn).
 
 -spec items([atom()], [binary()]) -> [uri()].
 items(Sources, Targets) ->

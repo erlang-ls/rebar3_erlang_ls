@@ -22,17 +22,11 @@ loop(Lines) ->
       BinLength = proplists:get_value(<<"content-length">>, Headers),
       Length = binary_to_integer(BinLength),
       {ok, Payload} = file:read(standard_io, Length),
-      Request = jsx:decode(Payload, [return_maps]),
-      #{ <<"id">> := Id
-       , <<"method">> := Method
-       , <<"params">> := Params } = Request,
-      RequestType = request_type(Request),
-      case RequestType of
-        notification ->
-          ok = rebar3_bsp_agent:handle_notification(Method, Params);
-        request ->
-          Result = rebar3_bsp_agent:handle_request(Method, Params),
-          Response = rebar3_bsp_protocol:response(Id, Result),
+      Request = rebar3_bsp_jsonrpc:decode_content(Payload),
+      case rebar3_bsp_agent:handle_message(Request) of
+        ok ->
+          ok;
+        {response, Response} ->
           io:format(standard_io, "~s", [Response])
       end,
       ?MODULE:loop([]);
@@ -50,9 +44,3 @@ parse_headers(Lines) ->
 parse_header(Line) ->
   [Name, Value] = binary:split(Line, <<":">>),
   {string:trim(string:lowercase(Name)), string:trim(Value)}.
-
--spec request_type(map()) -> notification | request.
-request_type(#{<<"id">> := _Id}) ->
-  request;
-request_type(_) ->
-  notification.

@@ -165,7 +165,7 @@ handle_info({Port, {data, Data}}, #state{port = Port} = State) ->
         , notifications = Notifications0
         , requests = Requests0
         } = State,
-  {Responses, _Buffer} = rebar3_bsp_jsonrpc:split(Data),
+  {ok, Responses, _Buffer} = rebar3_bsp_jsonrpc:decode_packets(Data),
   %% TODO: Refactor
   {Pending, Notifications, Requests}
     = do_handle_messages(Responses, Pending0, Notifications0, Requests0),

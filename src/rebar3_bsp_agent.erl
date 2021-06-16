@@ -22,7 +22,8 @@
         ]).
 
 %% BSP Callbacks
--export([ handle_notification/2
+-export([ handle_message/1
+        , handle_notification/2
         , handle_request/2
         ]).
 
@@ -73,7 +74,19 @@ run_xref() ->
 %%==============================================================================
 %% BSP Callbacks
 %%==============================================================================
--spec handle_notification(binary(), map()) -> map().
+-spec handle_message(map()) -> ok | {response, binary()}.
+handle_message(#{method := Method, params := Params} = Message) ->
+  case Message of
+    #{id := Id} ->
+      Result = handle_request(Method, Params),
+      Response = rebar3_bsp_protocol:response(Id, Result),
+      {response, Response};
+    _ ->
+      ok = handle_notification(Method, Params),
+      ok
+  end.
+
+-spec handle_notification(binary(), map()) -> ok.
 handle_notification(Method, Params) ->
   gen_server:cast(?SERVER, {notification, Method, Params}).
 

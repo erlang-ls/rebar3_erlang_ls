@@ -33,6 +33,7 @@
         , handle_cast/2
         , handle_info/2
         , format_status/2
+        , terminate/2
         ]).
 
 %%==============================================================================
@@ -108,7 +109,7 @@ init(R3State) ->
       rebar_log:log(debug, "Generating new connection file in: ~s", [Dir]),
       rebar3_bsp_connection:generate(Dir)
   end,
-  {ok, StdIOServer} = rebar3_bsp_stdio:start_link(),
+  {ok, StdIOServer} = rebar3_bsp_portio:start_link(),
   {ok, #{ rebar3_state => R3State
         , stdio_server => StdIOServer}}.
 
@@ -188,6 +189,10 @@ handle_info(Request, State) ->
 
 format_status(_Opt, [_PDict, State]) ->
   [{data, [{"State", State#{rebar3_state => redacted}}]}].
+
+-spec terminate(any(), state()) -> ok.
+terminate(_Reason, #{ stdio_server := StdioServer } = _State) ->
+  rebar3_bsp_portio:stop(StdioServer).
 
 %%==============================================================================
 %% Internal Functions

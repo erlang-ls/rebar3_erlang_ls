@@ -49,19 +49,19 @@ buildtarget_compile(_Params, State) ->
 
 -spec buildtarget_sources(buildTargetSourcesParams(), rebar3_state:t()) ->
         {buildTargetSourcesResult(), rebar3_state:t()}.
-buildtarget_sources(#{ <<"targets">> := Targets }, State) ->
+buildtarget_sources(#{ targets := Targets }, State) ->
   Items = items(rebar_state:project_apps(State), Targets),
   {#{ items => Items }, State}.
 
 -spec buildtarget_dependencysources(dependencySourcesParams(), rebar3_state:t()) ->
         {dependencySourcesResult(), rebar3_state:t()}.
-buildtarget_dependencysources(#{ <<"targets">> := Targets }, State) ->
+buildtarget_dependencysources(#{ targets := Targets }, State) ->
   Items = items(rebar_state:all_deps(State), Targets),
   {#{ items => Items }, State}.
 
--spec custom_format(#{}, rebar_state:t()) -> {map(), rebar_state:t()}.
+-spec custom_format(map(), rebar_state:t()) -> {map(), rebar_state:t()}.
 custom_format(Params, State) ->
-  #{<<"output">> := Output, <<"file">> := File} = Params,
+  #{output := Output, file := File} = Params,
   Args = ["format", "-o", binary_to_list(Output), "-f", binary_to_list(File)],
   case rebar3:run(State, Args) of
     {ok, _NewState} ->

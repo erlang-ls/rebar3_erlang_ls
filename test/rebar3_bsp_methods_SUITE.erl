@@ -47,12 +47,12 @@ init_per_testcase(_TestCase, Config) ->
   ok = file:set_cwd(sample_app_dir()),
   {ok, RebarConfig} = file:consult("rebar.config"),
   {ok, State} = erl_subgraph_compile:init(rebar_state:new(RebarConfig)),
-  rebar3_bsp_agent:start_link(State),
+  {ok, _Pid} = rebar3_bsp_agent:start_link(State),
   [{cwd, Cwd}|Config].
 
 -spec end_per_testcase(atom(), config()) -> ok.
 end_per_testcase(_TestCase, _Config) ->
-  rebar3_bsp_agent:stop(),
+  ok = rebar3_bsp_agent:stop(),
   ok.
 
 -spec all() -> [atom()].

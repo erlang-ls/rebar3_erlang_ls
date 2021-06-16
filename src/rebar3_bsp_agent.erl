@@ -100,15 +100,6 @@ handle_request(Method, Params) ->
 %%==============================================================================
 -spec init(rebar3_state:t()) -> {ok, state()}.
 init(R3State) ->
-  Dir = rebar_state:dir(R3State),
-  case rebar3_bsp_connection:exists(Dir) of
-    true ->
-      rebar_log:log(debug, "Using existing connection file from: ~s", [Dir]),
-      ok;
-    false ->
-      rebar_log:log(debug, "Generating new connection file in: ~s", [Dir]),
-      rebar3_bsp_connection:generate(Dir)
-  end,
   {ok, StdIOServer} = rebar3_bsp_portio:start_link(),
   {ok, #{ rebar3_state => R3State
         , stdio_server => StdIOServer}}.

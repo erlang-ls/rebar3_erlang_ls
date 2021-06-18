@@ -132,7 +132,7 @@ handle_cast(_Request, State) ->
 -spec handle_info(any(), state()) -> {noreply, state(), {continue, {messages, [message()]}}}.
 handle_info({Port, {data, Data}}, #state{port = Port, buffer = Buffer} = State) ->
   AllData = <<Buffer/binary, Data/binary>>,
-  {ok, Messages, RestData} = rebar3_bsp_jsonrpc:decode_packets(AllData),
+  {ok, Messages, RestData} = rebar3_bsp_protocol:decode_packets(AllData),
   {noreply, State#state{ buffer = RestData }, {continue, {messages, Messages}}}.
 
 -spec handle_continue({messages, []}, state()) -> {noreply, state()};

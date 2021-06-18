@@ -1,4 +1,38 @@
 -module(rebar3_bsp_server).
+-behavior(json_rpc_client).
+
+start_link(Rebar3State, {port, Port}) ->
+    json_rpc_client:start_link({local, ?SERVER}, ?MODULE, Rebar3State, Port, []).
+
+init(Rebar3State) ->
+    State = #{ rebar3_state => Rebar3State
+             , server_state => #{ is_initialized => false
+                                , is_shutdown => false
+                                }
+             },
+    {ok, State}.
+
+handle_message(Message, State) ->
+    MessageType = rebar3_bsp_protocol:message_type(Message),
+    handle_message(MessageType, Message, State).
+
+handle_message( request
+              , #{ id := Id, method := Method } = Message
+              , #{ server_state := ServerState
+                 , rebar3_state := Rebar3State } = State
+              ) ->
+    Params = maps:get(params, Message, #{}),
+    {DispatchResult, NewState} = try_dispatch(Method, Params, State),
+    Response = case DispatchResult of
+                   {ok, State} ->
+                       rebar3_bsp_protocol:response(Id, null);
+                   {ok, Result} ->
+                       rebar3_bsp_protocol:response(Id, Result);
+                   {error, Error} ->
+                       rebar3_bsp_protocol:error(Id, Error)
+               end,
+    {reply, Response, NewState}.
+
 -behavior(gen_server).
 
 -include("rebar3_bsp.hrl").
@@ -85,7 +119,7 @@ handle_info({Port, {data, Data}}, #{port := Port, buffer := Buffer} = State) ->
                    ; ({dispatch_messages, []}, state()) -> {noreply, state()}
                    ; ({dispatch_messages, [map()]}, state()) -> {noreply, state(), {continue, {dispatch_messages, [map()]}}}.
 handle_continue(decode, #{buffer := Buffer} = State) ->
-    case rebar3_bsp_jsonrpc:decode_packets(Buffer) of
+    case rebar3_bsp_protocol:decode_packets(Buffer) of
         {ok, Messages, RestData} ->
             {noreply, State#{buffer => RestData}, {continue, {dispatch_messages, Messages}}};
         {error, Reason} ->

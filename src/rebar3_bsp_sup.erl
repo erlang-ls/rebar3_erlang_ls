@@ -40,10 +40,7 @@ init([]) ->
               , period    => 60
               },
   simulate_group_leader(),
-  ChildSpecs = [ #{ id    => rebar3_bsp_portio
-                  , start => {rebar3_bsp_portio, start_link, []}
-                  }
-               ],
+  ChildSpecs = [],
   {ok, {SupFlags, ChildSpecs}}.
 
 -spec simulate_group_leader() -> ok.

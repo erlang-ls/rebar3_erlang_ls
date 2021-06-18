@@ -14,6 +14,44 @@
 %% Type Definitions
 %%==============================================================================
 
+%% Remember: in map type specs, := means _mandatory_ and => means _optional_
+%% We use binary() to mean JSON string
+
+%% Internal server state
+-type server_state() :: #{ is_initialized := boolean()
+                         , is_shutdown := boolean()
+                         }.
+
+%% Base protocol
+-type array() :: list().
+-type object() :: map().
+
+-type message() :: #{ jsonrpc := binary() }.
+-type params() :: array() | object().
+
+-type requestId() :: integer() | binary().
+-type requestMessage() :: #{ jsonrpc := binary()
+                           , id := requestId()
+                           , method := binary()
+                           , params => params()
+                           }.
+
+-type responseError() :: #{ code := integer()
+                          , message := binary()
+                          , data => binary() | number() | boolean() | array() | object() | null
+                          }.
+-type responseId() :: integer() | binary() | null.
+-type responseResult() :: binary() | number() | boolean() | object() | null.
+-type responseMessage() :: #{ jsonrpc := binary()
+                            , id := responseId()
+                            , result => responseResult()
+                            , error => responseError()
+                            }.
+
+-type notificationMessage() :: #{ method := binary()
+                                , params => params()
+                                }.
+
 %% Common
 -type uri() :: binary().
 

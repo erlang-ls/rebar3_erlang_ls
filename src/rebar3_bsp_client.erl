@@ -12,6 +12,7 @@
         , handle_call/3
         , handle_cast/2
         , handle_info/2
+        , handle_continue/2
         , terminate/2
         ]).
 
@@ -20,19 +21,14 @@
 %%==============================================================================
 %% Erlang API
 -export([ start_link/1
-        , start_link/2
         , stop/0
         ]).
 
-%% Server Lifetime
--export([ build_initialize/1
-        , build_initialized/1
-        , build_shutdown/0
-        , build_exit/0
-        , build_show_message/1
-        , build_log_message/1
-        , build_publish_diagnostics/1
-        ]).
+-export([ send_request/2
+        , send_notification/2
+        , get_requests/0
+        , get_notifications/0
+        ].
 
 %%==============================================================================
 %% Includes
@@ -43,7 +39,6 @@
 %% Defines
 %%==============================================================================
 -define(SERVER, ?MODULE).
--define(TIMEOUT, infinity).
 
 %%==============================================================================
 %% Record Definitions
@@ -52,7 +47,7 @@
                , pending       = []
                , notifications = []
                , requests      = []
-               , port          :: port()
+               , port          :: port() | pid()
                , buffer        = <<>>
                }).
 
@@ -61,208 +56,150 @@
 %%==============================================================================
 -type state()      :: #state{}.
 -type request_id() :: pos_integer().
--type params()     :: #{}.
+-type params()     :: map().
 
 %%==============================================================================
 %% Erlang API
 %%==============================================================================
--spec start_link(string()) -> {ok, pid()}.
-start_link(RootPath) ->
+start_link({root, RootPath}) ->
   {ok, Executable, Args} = rebar3_bsp_connection:discover(RootPath),
-  start_link(Executable, Args).
-
--spec start_link(string(), [string()]) ->
-        {ok, pid()}.
-start_link(Executable, Args) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, {Executable, Args}, []).
+  start_link({exec, Executable, Args});
+start_link({exec, Executable, Args}) ->
+  Port = open_port({spawn_executable, Executable},
+                   [{args, Args}, use_stdio, binary]),
+  start_link({port, Port});
+start_link({port, Port}) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, {port, Port}, []).
 
 -spec stop() -> ok.
 stop() ->
   gen_server:stop(?SERVER).
 
+-spec send_request(binary(), map()) -> {ok, request_id()}.
+send_request(Method, Params) ->
+  gen_server:call(?SERVER, {send_request, Method, Params})
+
+-spec send_notification(binary(), map()) -> ok.
+send_notification(Method, Params) ->
+  gen_server:call(?SERVER, {send_notification, Method, Params}).
+
+-spec get_requests() -> [map()].
+get_requests() ->
+  gen_server:call(?SERVER, get_requests).
+
+-spec get_notifications() -> [map()].
+get_notifications() ->
+  gen_server:call(?SERVER, get_notifications).
+
 %%==============================================================================
 %% Server Lifetime
 %%==============================================================================
--spec build_initialize(params()) -> map().
-build_initialize(Params) ->
-  gen_server:call(?SERVER, {build_initialize, Params}, ?TIMEOUT).
-
--spec build_initialized(params()) -> map().
-build_initialized(Params) ->
-  gen_server:call(?SERVER, {build_initialized, Params}).
-
--spec build_shutdown() -> map().
-build_shutdown() ->
-  gen_server:call(?SERVER, {shutdown}).
-
--spec build_exit() -> ok.
-build_exit() ->
-  gen_server:call(?SERVER, {exit}).
-
--spec build_show_message(params()) -> ok.
-build_show_message(Params) ->
-  gen_server:call(?SERVER, {build_show_message, Params}).
-
--spec build_log_message(params()) -> ok.
-build_log_message(Params) ->
-  gen_server:call(?SERVER, {build_log_message, Params}).
-
--spec build_publish_diagnostics(params()) -> ok.
-build_publish_diagnostics(Params) ->
-  gen_server:call(?SERVER, {build_publish_diagnostics, Params}).
 
 %%==============================================================================
 %% gen_server Callback Functions
 %%==============================================================================
--spec init({string(), [string()]}) -> {ok, state()}.
-init({Executable, Args}) ->
-  process_flag(trap_exit, true),
-  Opts = [{args, Args}, use_stdio, binary],
-  Port = open_port({spawn_executable, Executable}, Opts),
+-spec init({port, port() | pid()}) -> {ok, state()}.
+init({port, Port}) ->
   {ok, #state{port = Port}}.
 
--spec handle_call(any(), any(), state()) -> {reply, any(), state()}.
-handle_call({build_initialized, Opts}, _From, #state{port = Port} = State) ->
-  Method = method_lookup(build_initialized),
-  Params = notification_params(Opts),
-  Content = rebar3_bsp_protocol:notification(Method, Params),
+-spec handle_call({send_request, binary(), params()}, pid(), state()) -> {noreply, {ok, integer()}, state()};
+                 ({send_notification, binary(), params()}, pid(), state()) -> {reply, ok, state()};
+                 (get_requests, pid(), state()) -> {reply, [requestMessage()], state()};
+                 (get_notifications, pid(), state()) -> {reply, [notificationMessage()], state()}.
+handle_call({send_request, Method, Params}, From,
+            #state{port = Port, request_id = RequestId, pending = Pending} = State) ->
+  EffectiveParams = maps:merge(default_params(Method), Params),
+  Content = rebar3_bsp_protocol:request(RequestId, Method, EffectiveParams),
+  send(Port, Content),
+  {noreply, {ok, RequestId}, State#state{ request_id = RequestId + 1
+                                        , pending = [{RequestId, From}|Pending]
+                                        }};
+handle_call({send_notification, Method, Params}, _From,
+            #state{port = Port} = State) ->
+  EffectiveParams = maps:merge(default_params(Method), Params),
+  Content = rebar3_bsp_protocol:notification(Method, EffectiveParams),
   send(Port, Content),
   {reply, ok, State};
-handle_call({exit}, _From, #state{port = Port} = State) ->
-  RequestId = State#state.request_id,
-  Method = <<"exit">>,
-  Params = #{},
-  Content = rebar3_bsp_protocol:request(RequestId, Method, Params),
-  send(Port, Content),
-  {reply, ok, State};
-handle_call({shutdown}, From, #state{port = Port} = State) ->
-  RequestId = State#state.request_id,
-  Method = <<"shutdown">>,
-  Params = #{},
-  Content = rebar3_bsp_protocol:request(RequestId, Method, Params),
-  send(Port, Content),
-  {noreply, State#state{ request_id = RequestId + 1
-                       , pending    = [{RequestId, From} | State#state.pending]
-                       }};
-handle_call(Input = {build_initialize, _}, From, State) ->
-  #state{ port = Port, request_id = RequestId } = State,
-  Method = method_lookup(build_initialize),
-  Params = request_params(Input),
-  Content = rebar3_bsp_protocol:request(RequestId, Method, Params),
-  send(Port, Content),
-  {noreply, State#state{ request_id = RequestId + 1
-                       , pending    = [{RequestId, From} | State#state.pending]
-                       }};
-handle_call(Request, _From, State) ->
-  {reply, {error, {unexpected_request, Request}}, State}.
+handle_call(get_requests, _From, #state{ requests = Requests } = State) ->
+  {reply, lists:reverse(Requests), State#state{ requests = [] }};
+handle_call(get_notifications, _From, #state{ notifications = Notifications } = State) ->
+  {reply, lists:reverse(Notifications), State#state{ notifications = [] }}.
 
 -spec handle_cast(any(), state()) -> {noreply, state()}.
 handle_cast(_Request, State) ->
-  {noreply, State}.
+  error(badarg).
 
--spec handle_info(any(), state()) -> {noreply, state()}.
-handle_info({Port, {data, Data}}, #state{port = Port} = State) ->
-  #state{ pending = Pending0
-        , notifications = Notifications0
-        , requests = Requests0
-        , buffer = Buffer
-        } = State,
+-spec handle_info(any(), state()) -> {noreply, state(), {continue, {messages, [message()]}}}.
+handle_info({Port, {data, Data}}, #state{port = Port, buffer = Buffer} = State) ->
   AllData = <<Buffer/binary, Data/binary>>,
-  {ok, Responses, RestData} = rebar3_bsp_jsonrpc:decode_packets(AllData),
-  %% TODO: Refactor
-  {Pending, Notifications, Requests}
-    = do_handle_messages(Responses, Pending0, Notifications0, Requests0),
-  {noreply, State#state{ pending = Pending
-                       , notifications = Notifications
-                       , requests = Requests
-                       , buffer = RestData
-                       }};
-handle_info(_Request, State) ->
-  {noreply, State}.
+  {ok, Messages, RestData} = rebar3_bsp_jsonrpc:decode_packets(AllData),
+  {noreply, State#state{ buffer = RestData }, {continue, {messages, Messages}}}.
+
+-spec handle_continue({messages, []}, state()) -> {noreply, state()};
+                     ({messages, [message()]}, state()) -> {noreply,
+                                                            state(),
+                                                            {continue, {messages, [message()]}}.
+handle_continue({messages, []}, State) ->
+  {noreply, State};
+handle_continue({messages, [M|Ms]}, State) ->
+  {noreply, handle_message(M, State), {continue, {messages, Ms}}}.
 
 -spec terminate(any(), state()) -> ok.
-terminate(_Reason, #state{port = Port} = _State) ->
+terminate(_Reason, #state{port = Port} = _State) when is_port(Port) ->
   true = port_close(Port),
+  ok;
+terminate(_Reason, _State) ->
   ok.
 
 %%==============================================================================
 %% Internal Functions
 %%==============================================================================
--spec do_handle_messages([map()], [any()], [any()], [any()]) ->
-        {[any()], [any()], [any()]}.
-do_handle_messages([], Pending, Notifications, Requests) ->
-  {Pending, Notifications, Requests};
-do_handle_messages([Message|Messages], Pending, Notifications, Requests) ->
-  case is_response(Message) of
-    true ->
-      RequestId = maps:get(id, Message),
-      case lists:keyfind(RequestId, 1, Pending) of
-        {RequestId, From} ->
-          gen_server:reply(From, Message),
-          do_handle_messages( Messages
-                            , lists:keydelete(RequestId, 1, Pending)
-                            , Notifications
-                            , Requests
-                            );
-        false ->
-          do_handle_messages(Messages, Pending, Notifications, Requests)
-      end;
-    false ->
-      case is_notification(Message) of
-        true ->
-          do_handle_messages( Messages
-                            , Pending
-                            , [Message|Notifications]
-                            , Requests);
-        false ->
-          do_handle_messages( Messages
-                            , Pending
-                            , Notifications
-                            , [Message|Requests])
-      end
-  end.
+-spec handle_message(message(), state()) -> state().
+handle_message(M, State) ->
+  case M of
+    %% Request - always has id and method
+    #{ id := _Id, method := _Method } ->
+      handle_request(M, State);
+    %% Response - always has id but never has a method
+    #{ id := _Id } ->
+      handle_response(M, State);
+    %% Notification - doesn't have an id, always has a method
+    #{ method := _Method } ->
+      handle_notification(M, State)
+  end.  
 
--spec request_params(tuple()) -> any().
-request_params({build_initialize, RootUri}) ->
-  {ok, Vsn} = application:get_key(rebar3_bsp, vsn),
-  #{ <<"displayName">>  => <<"Rebar3 BSP Client">>
-   , <<"version">>      => list_to_binary(Vsn)
-   , <<"bspVersion">>   => <<"2.0.0">>
-   , <<"rootUri">>      => RootUri
-   , <<"capabilities">> => #{ <<"languageIds">> => [<<"erlang">>] }
-   , <<"data">>         => #{}
-   }.
+-spec handle_request(requestMessage(), state()) -> state().
+handle_request(M, #state{ requests = Requests} = State) ->
+  State#state{ requests = [M|Requests] }.
 
--spec notification_params(tuple()) -> map().
-notification_params({Uri}) ->
-  TextDocument = #{ uri => Uri },
-  #{textDocument => TextDocument};
-notification_params({Uri, LanguageId, Version, Text}) ->
-  TextDocument = #{ uri        => Uri
-                  , languageId => LanguageId
-                  , version    => Version
-                  , text       => Text
-                  },
-  #{textDocument => TextDocument};
-notification_params(_) ->
+-spec handle_response(responseMessage(), state()) -> state().
+handle_response(#{ id := Id } = M, #state{ pending = Pending } = State) ->
+  NewPending = case proplists:get_value(Id, Pending) of
+                 undefined ->
+                   ?LOG_WARNING("Discarding unexpected response ~p", [M]),
+                   Pending;
+                 From ->
+                   gen_server:reply(From, M),
+                   proplists:delete(Id, Pending)
+               end,
+  State#state{ pending = NewPending }.
+
+-spec handle_notification(notificationMessage(), state()) -> state().
+handle_notification(M, #state{ notifications = Notifications } = State) ->
+  State#state{ notifications = [M|Notifications] }.
+
+-spec default_params(binary()) -> params().
+default_params(<<"build/initialize">>) ->
+  #{ displayName  => <<"Rebar3 BSP Client">>
+   , version      => rebar3_bsp_connection:version(?BSP_APPLICATION)
+   , bspVersion   => ?BSP_VSN
+   , capabilities => #{ languageIds => [<<"erlang">>] }
+   };
+default_params(_Method) ->
   #{}.
 
--spec is_notification(map()) -> boolean().
-is_notification(#{id := _Id}) ->
-  false;
-is_notification(_) ->
-  true.
-
--spec is_response(map()) -> boolean().
-is_response(#{method := _Method}) ->
-  false;
-is_response(_) ->
-  true.
-
--spec send(port(), binary()) -> ok.
+-spec send(port() | pid(), binary()) -> ok.
 send(Port, Payload) ->
-  port_command(Port, Payload).
+  Port ! {self(), {command, Payload}},
+  ok.
 
--spec method_lookup(atom()) -> binary().
-method_lookup(build_initialize) -> <<"build/initialize">>;
-method_lookup(build_initialized) -> <<"build/initialized">>.

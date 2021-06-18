@@ -4,7 +4,7 @@
 
 -define(PROVIDER, bsp).
 -define(DEPS, [compile]).
--define(AGENT, rebar3_bsp_agent).
+-define(AGENT, rebar3_bsp_server).
 -define(NAME_PREFIX, "rebar3_bsp_").
 
 %% ===================================================================
@@ -47,8 +47,8 @@ format_error(Reason) ->
 start_agent(State) ->
   simulate_proc_lib(),
   true = register(?AGENT, self()),
-  {ok, GenState} = rebar3_bsp_agent:init(State),
-  gen_server:enter_loop(rebar3_bsp_agent, [], GenState, {local, ?AGENT}, hibernate).
+  {ok, GenState} = rebar3_bsp_server:init(State),
+  gen_server:enter_loop(rebar3_bsp_server, [], GenState, {local, ?AGENT}, hibernate).
 
 -spec setup_name(rebar_state:t()) -> ok.
 setup_name(State) ->
@@ -68,5 +68,5 @@ setup_name(State) ->
 simulate_proc_lib() ->
   FakeParent = spawn_link(fun() -> timer:sleep(infinity) end),
   put('$ancestors', [FakeParent]),
-  put('$initial_call', {rebar3_bsp_agent, init, 1}),
+  put('$initial_call', {rebar3_bsp_server, init, 1}),
   ok.

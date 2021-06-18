@@ -1,84 +1,107 @@
 -module(rebar3_bsp_methods).
 
--export([ build_initialize/2
-        , build_initialized/2
-        , workspace_buildtargets/2
-        , buildtarget_compile/2
-        , buildtarget_sources/2
-        , buildtarget_dependencysources/2
+%% request methods
+-export([ 'build/initialize'/3
+        , 'build/shutdown'/3
+        , 'workspace/buildTargets'/3
+        , 'workspace/reload'/3
+        , 'buildTarget/sources'/3
+        , 'buildTarget/dependencySources'/3
         ]).
 
--export([ custom_format/2
+%% notification methods
+-export([ 'build/initialized'/3
+        , 'build/exit'/3
         ]).
 
 -include("rebar3_bsp.hrl").
 
--spec build_initialize(initializeBuildParams(), rebar3_state:t()) ->
-        {initializeBuildResult(), rebar3_state:t()}.
-build_initialize(_Params, State) ->
+-define(REQUEST_SPEC(Method, ParamType, ResultType),
+        Method(ParamType, server_state(), rebar3_state:t()) ->
+               {ResultType, server_state(), rebar3_state:t()}).
+
+-define(NOTIFICATION_SPEC(Method, ParamType),
+        Method(ParamType, server_state(), rebar3_state:t()) ->
+               {ok, server_state(), rebar3_state:t()}).
+
+-spec ?REQUEST_SPEC('build/initialize', initializeBuildParams(), initializeBuildResult()).
+'build/initialize'(_Params, ServerState, R3State) ->
   Result = #{ displayName => <<"rebar3_bsp">>
             , version => rebar3_bsp_connection:version(?BSP_APPLICATION)
             , bspVersion => ?BSP_VSN
             , capabilities => #{}
             },
-  {Result, State}.
+  {Result, ServerState, R3State}.
 
--spec build_initialized(initializedBuildParams(), rebar3_state:t()) ->
-        {ok, rebar3_state:t()}.
-build_initialized(#{}, State) ->
-  {ok, NewState} = rebar3:run(State, ["compile"]),
-  {ok, NewState}.
+-spec ?NOTIFICATION_SPEC('build/initialized', initializedBuildParams()).
+'build/initialized'(#{}, ServerState, R3State) ->
+    {ok, NewR3State} = rebar3:run(R3State, ["compile"]),
+    {ok, ServerState#{is_initialized => true}, NewR3State}.
 
--spec workspace_buildtargets(
-        workspaceBuildTargetsParams(), rebar3_state:t()
-       ) -> {workspaceBuildTargetsResult(), rebar3_state:t()}.
-workspace_buildtargets(#{}, State) ->
-  Profiles = rebar_state:current_profiles(State),
-  %% TODO: Targets should be of the form #{uri => binary()}
-  Targets = [#{id => atom_to_binary(P, utf8)} || P <- Profiles],
-  {#{ targets => Targets }, State}.
+-spec ?REQUEST_SPEC('build/shutdown', null, null).
+'build/shutdown'(null, ServerState, R3State) ->
+    {null, ServerState#{is_shutdown => true}, R3State}.
 
--spec buildtarget_compile(compileParams(), rebar3_state:t()) ->
-        {compileResult(), rebar3_state:t()}.
-buildtarget_compile(_Params, State) ->
-  %% TODO: Hard-coded filename
-  {ok, NewState} = rebar3:run(State, ["erl_subgraph_compile", "-f", "src/sample_app.erl"]),
-  %% TODO: Compile test application and publish diagnostics
-  %% TODO: Macros for statusCode
-  {#{ statusCode => 0 }, NewState}.
+-spec ?NOTIFICATION_SPEC('build/exit', null).
+'build/exit'(null, ServerState, R3State) ->
+    ExitCode = case ServerState of
+        #{is_shutdown := true} ->
+            0;
+        _ ->
+            1
+    end,
+    erlang:halt(ExitCode),
+    {ok, ServerState, R3State}.
 
--spec buildtarget_sources(buildTargetSourcesParams(), rebar3_state:t()) ->
-        {buildTargetSourcesResult(), rebar3_state:t()}.
-buildtarget_sources(#{ targets := Targets }, State) ->
-  Items = items(rebar_state:project_apps(State), Targets),
-  {#{ items => Items }, State}.
+-spec ?REQUEST_SPEC('workspace/buildTargets', workspaceBuildTargetsParams(), workspaceBuildTargetsResult()).
+'workspace/buildTargets'(_Params, ServerState, R3State) ->
+    BuildTargets = [#{ id => #{ uri => atom_to_binary(Profile) }
+                     , tags => []
+                     , capabilities => #{ canCompile => true
+                                        , canTest => false
+                                        , canRun => false
+                                        , canDebug => false
+                                        }
+                     , languageIds => [<<"erlang">>]
+                     , dependencies => []
+                     }
+                    || Profile <- rebar_state:current_profiles(R3State)],
+    {#{targets => BuildTargets}, ServerState, R3State}.
 
--spec buildtarget_dependencysources(dependencySourcesParams(), rebar3_state:t()) ->
-        {dependencySourcesResult(), rebar3_state:t()}.
-buildtarget_dependencysources(#{ targets := Targets }, State) ->
-  Items = items(rebar_state:all_deps(State), Targets),
-  {#{ items => Items }, State}.
+-spec ?REQUEST_SPEC('workspace/reload', null, null).
+'workspace/reload'(null, ServerState, R3State) ->
+    %% TODO
+    {null, ServerState, R3State}.
 
--spec custom_format(map(), rebar_state:t()) -> {map(), rebar_state:t()}.
-custom_format(Params, State) ->
-  #{output := Output, file := File} = Params,
-  Args = ["format", "-o", binary_to_list(Output), "-f", binary_to_list(File)],
-  case rebar3:run(State, Args) of
-    {ok, _NewState} ->
-      ok = rebar_paths:set_paths([deps, plugins], State),
-      {#{}, State};
-    {error, Reason} ->
-      {#{<<"error">> => unicode:characters_to_binary(Reason)}, State}
-  end.
+-spec ?REQUEST_SPEC('buildTarget/sources', buildTargetSourcesParams(), buildTargetSourcesResult()).
+'buildTarget/sources'(#{targets := Targets}, ServerState, R3State) ->
+    Items = items(rebar_state:project_apps(R3State), Targets, R3State),
+    {#{items => Items}, ServerState, R3State}.
+
+-spec ?REQUEST_SPEC('buildTarget/dependencySources', dependencySourcesParams(), dependencySourcesResult()).
+'buildTarget/dependencySources'(#{targets := Targets}, ServerState, R3State) ->
+    Items = items(rebar_state:all_deps(R3State), Targets, R3State),
+    {#{items => Items}, ServerState, R3State}.
 
 %% Internal Functions
 
--spec items([atom()], [binary()]) -> [uri()].
-items(Sources, Targets) ->
-  Apps = [A || A <- Sources, belongs_to_targets(Targets, A)],
-  [rebar_app_info:dir(A) || A <- Apps].
-
--spec belongs_to_targets([binary()], rebar_app_info:t()) -> boolean().
-belongs_to_targets(Targets, A) ->
-  Profiles = rebar_app_info:profiles(A),
-  lists:any(fun(T) -> lists:member(binary_to_atom(T, utf8), Profiles) end, Targets).
+-spec items([atom()], [buildTargetIdentifier()], rebar3_state:t()) -> [sourcesItem()]. 
+items(Applications, Targets, R3State) ->
+    TargetProfiles = [erlang:binary_to_atom(Uri) || #{ uri := Uri } <- Targets],
+    TargetsAndApps = [{Target, A} || A <- Applications,
+                                     {Target, Profile} <- lists:zip(Targets, TargetProfiles),
+                                     lists:member(Profile, rebar_app_info:profiles(A))],
+    TargetMap = lists:foldl(
+        fun({Target, App}, Acc) ->
+            {Sources, Roots} = maps:get(Acc, Target, {[], []}),
+            AppDir = rebar_app_info:dir(App),
+            Source = #{ uri => erlang:list_to_binary(AppDir)
+                      , kind => ?SOURCE_ITEM_KIND_DIR
+                      , generated => false
+                      },
+            Root = rebar_state:dir(R3State),
+            Acc#{ Target => {[Source|Sources], [Root, Roots]} }
+        end, #{}, TargetsAndApps),
+    [ #{ target => Target, sources => Sources, roots => Roots}
+      || {Target, {Sources, Roots}} <- maps:to_list(TargetMap)].
+    

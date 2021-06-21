@@ -125,7 +125,7 @@ decode_packet(Data) ->
         <<Content:Length/binary, FinalTail/binary>> ->
           {ok, decode_content(Content), FinalTail};
         _ ->
-          {more, Length - erlang:byte_size(Rest)}
+          {more, undefined} %Length - erlang:byte_size(Rest)}
       end;
     {more, More} ->
       {more, More};

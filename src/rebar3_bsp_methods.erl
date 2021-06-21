@@ -1,17 +1,17 @@
 -module(rebar3_bsp_methods).
 
 %% request methods
--export([ 'build/initialize'/3
-        , 'build/shutdown'/3
-        , 'workspace/buildTargets'/3
-        , 'workspace/reload'/3
-        , 'buildTarget/sources'/3
-        , 'buildTarget/dependencySources'/3
+-export([ 'build/initialize'/2
+        , 'build/shutdown'/2
+        , 'workspace/buildTargets'/2
+        , 'workspace/reload'/2
+        , 'buildTarget/sources'/2
+        , 'buildTarget/dependencySources'/2
         ]).
 
 %% notification methods
--export([ 'build/initialized'/3
-        , 'build/exit'/3
+-export([ 'build/initialized'/2
+        , 'build/exit'/2
         ]).
 
 -include("rebar3_bsp.hrl").
@@ -75,7 +75,7 @@
 
 -spec ?REQUEST_SPEC('buildTarget/sources', buildTargetSourcesParams(), buildTargetSourcesResult()).
 'buildTarget/sources'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->
-    Items = items(rebar_state:project_apps(R3State), Targets),
+    Items = items(rebar_state:project_apps(R3State), Targets, R3State),
     {response, #{items => Items}, ServerState}.
 
 -spec ?REQUEST_SPEC('buildTarget/dependencySources', dependencySourcesParams(), dependencySourcesResult()).

@@ -158,5 +158,5 @@ content(Body) ->
   unicode:characters_to_binary([headers(Body), "\r\n", Body]).
 
 -spec headers(binary()) -> iolist().
-headers(Body) ->
+headers(Body) when is_binary(Body) ->
   io_lib:format("Content-Length: ~p\r\n", [byte_size(Body)]).

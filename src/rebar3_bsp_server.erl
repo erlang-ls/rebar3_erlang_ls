@@ -57,7 +57,7 @@ default_value(is_shutdown) ->
 default_value(port) ->
   IoFdString = os:getenv(?IO_FDS_ENV_VARIABLE, ?DEFAULT_IO_FDS),
   {ok, [InFd, OutFd], _Garbage} = io_lib:fread("~d ~d", IoFdString),
-  erlang:open_port({fd, InFd, OutFd}, binary);
+  erlang:open_port({fd, InFd, OutFd}, [binary]);
 default_value(buffer) ->
   <<>>;
 default_value(messages) ->

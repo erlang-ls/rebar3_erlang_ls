@@ -45,7 +45,7 @@
                , requests      = []
                , messages      = []
                , buffer        = <<>>
-               , port              :: port() | pid()
+               , port              :: port() | pid() | undefined
                }).
 
 %%==============================================================================
@@ -63,7 +63,7 @@ start_link({root, RootPath}) ->
 start_link({exec, Executable, Args, PortSettings}) ->
   start_link({ open_port
              , {spawn_executable, Executable}
-             , PortSettings ++ [{args, Args}, use_stdio, binary]
+             , PortSettings ++ [{args, Args}, use_stdio, binary, exit_status]
              });
 start_link({port, Port}) ->
   start_link({reuse_port, Port});
@@ -122,7 +122,9 @@ handle_cast(_Request, _State) ->
 
 -spec handle_info(any(), state()) -> {noreply, state(), {continue, {messages, [message()]}}}.
 handle_info({Port, {data, NewData}}, #state{port = Port, buffer = OldBuffer} = State) ->
-  {noreply, State#state{ buffer = <<OldBuffer/binary, NewData/binary>> }, {continue, decode}}.
+  {noreply, State#state{ buffer = <<OldBuffer/binary, NewData/binary>> }, {continue, decode}};
+handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) ->
+  {stop, {exit_status, Status}, State#state{port = undefined}}.
 
 handle_continue(decode, #state{buffer = Buffer, messages = OldMsgs} = State) ->
   case rebar3_bsp_protocol:decode_packets(Buffer) of

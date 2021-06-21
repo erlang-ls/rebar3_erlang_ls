@@ -35,7 +35,7 @@ do(State) ->
       rebar3_bsp_connection:generate(Dir);
     false ->
       setup_name(State),
-      start_agent(State)
+      start_server(State)
   end,
   {ok, State}.
 
@@ -43,11 +43,11 @@ do(State) ->
 format_error(Reason) ->
   io_lib:format("~p", [Reason]).
 
--spec start_agent(rebar_state:t()) -> no_return().
-start_agent(State) ->
+-spec start_server(rebar_state:t()) -> no_return().
+start_server(State) ->
   simulate_proc_lib(),
   true = register(?AGENT, self()),
-  {ok, GenState} = rebar3_bsp_server:init(State),
+  {ok, GenState} = rebar3_bsp_server:init(#{rebar3_state => State}),
   gen_server:enter_loop(rebar3_bsp_server, [], GenState, {local, ?AGENT}, hibernate).
 
 -spec setup_name(rebar_state:t()) -> ok.

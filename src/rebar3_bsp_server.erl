@@ -1,48 +1,8 @@
 -module(rebar3_bsp_server).
--behavior(json_rpc_client).
+-behaviour(gen_server).
 
-start_link(Rebar3State, {port, Port}) ->
-    json_rpc_client:start_link({local, ?SERVER}, ?MODULE, Rebar3State, Port, []).
+-export([ start_link/1 ]).
 
-init(Rebar3State) ->
-    State = #{ rebar3_state => Rebar3State
-             , server_state => #{ is_initialized => false
-                                , is_shutdown => false
-                                }
-             },
-    {ok, State}.
-
-handle_message(Message, State) ->
-    MessageType = rebar3_bsp_protocol:message_type(Message),
-    handle_message(MessageType, Message, State).
-
-handle_message( request
-              , #{ id := Id, method := Method } = Message
-              , #{ server_state := ServerState
-                 , rebar3_state := Rebar3State } = State
-              ) ->
-    Params = maps:get(params, Message, #{}),
-    {DispatchResult, NewState} = try_dispatch(Method, Params, State),
-    Response = case DispatchResult of
-                   {ok, State} ->
-                       rebar3_bsp_protocol:response(Id, null);
-                   {ok, Result} ->
-                       rebar3_bsp_protocol:response(Id, Result);
-                   {error, Error} ->
-                       rebar3_bsp_protocol:error(Id, Error)
-               end,
-    {reply, Response, NewState}.
-
--behavior(gen_server).
-
--include("rebar3_bsp.hrl").
-
-%% API
--export([ start_link/1
-        , stop/0
-        ]).
-
-%% gen_server callbacks
 -export([ init/1
         , handle_call/3
         , handle_cast/2
@@ -50,109 +10,125 @@ handle_message( request
         , handle_continue/2
         ]).
 
--define(IO_FDS_ENV_VARIABLE, "REBAR3_BSP_IO_FDS").
--define(DEFAULT_IO_FDS, "0 1 2").
--define(SERVER, ?MODULE).
+-include("rebar3_bsp.hrl").
 
--type state() :: #{ rebar3_state => rebar3_state:t()
-                  , server_state => server_state()
-                  , ioport => port() | undefined
-                  , errfd => integer() | undefined 
-                  , buffer => binary()
+-define(SERVER, ?MODULE).
+-define(IO_FDS_ENV_VARIABLE, "REBAR3_BSP_IO_FDS").
+-define(DEFAULT_IO_FDS, "0 1").
+
+-type state() :: #{ rebar3_state := rebar_state:t()     %% The rebar3 state
+                  , is_initialized := boolean()         %% Build server initialized?
+                  , is_shutdown := boolean()            %% Build server has shut down?
+                  , port := port() | pid() | undefined  %% IO Port
+                  , buffer := binary()                  %% Data buffer
+                  , messages := list()                  %% Pending incoming messages
                   }.
 
-%%==============================================================================
-%% API
-%%==============================================================================
--spec start_link( {rebar3_state:t()}
-                | {rebar3_state:t(), {fd, integer(), integer()}, integer()}
-                | {rebar3_state:t(), {port, pid()}, integer()}
-                ) -> {ok, pid()}.
-start_link(InitArgs) ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, InitArgs, []).
+-export_type([state/0]).
 
--spec stop() -> ok.
-stop() ->
-    gen_server:call(?SERVER, stop).
+-spec start_link(map()) -> {ok, pid()}.
+start_link(InitialState) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, InitialState, []).
 
-handle_request(Request) ->
-    gen_server:call(?SERVER, {handle_request, Request}).
+-spec init(map()) -> {ok, state()}.
+init(InitialState) ->
+  State = lists:foldl(fun(Key, StateAcc) ->
+                          case maps:is_key(Key, StateAcc) of
+                            true ->
+                              StateAcc;
+                            false ->
+                              StateAcc#{ Key => default_value(Key) }
+                          end
+                      end,
+                      InitialState,
+                      [ rebar3_state
+                      , is_initialized
+                      , is_shutdown
+                      , port
+                      , buffer
+                      , messages
+                      ]),
+  {ok, State}.
 
-%%==============================================================================
-%% gen_server callbacks
-%%==============================================================================
--spec init( {rebar3_state:t()}
-          | {rebar3_state:t(), {fd, integer(), integer()}, integer()}
-          | {rebar3_state:t(), {port, pid()}, integer}
-          ) -> {ok, state()}.
-init({R3State}) ->
-    {InFd, OutFd, ErrFd} = find_io_fds(),
-    init({R3State, {fd, InFd, OutFd}, ErrFd});
-init({R3State, {fd, InFd, OutFd}, ErrFd}) ->
-    Port = erlang:open_port({fd, InFd, OutFd}, [binary]),
-    init({R3State, {port, Port}, ErrFd});
-init({R3State, {port, Port}, ErrFd}) ->
-    {ok, #{ rebar3_state => R3State
-          , server_state => #{ is_initialized => false
-                             , is_shutdown => false
-                             }
-          , ioport => Port
-          , errfd => ErrFd
-          , buffer => <<>>}}.
+default_value(is_initialized) ->
+  false;
+default_value(is_shutdown) ->
+  false;
+default_value(port) ->
+  IoFdString = os:getenv(?IO_FDS_ENV_VARIABLE, ?DEFAULT_IO_FDS),
+  {ok, [InFd, OutFd], _Garbage} = io_lib:fread("~d ~d", IoFdString),
+  erlang:open_port({fd, InFd, OutFd}, binary);
+default_value(buffer) ->
+  <<>>;
+default_value(messages) ->
+  [].
 
--spec handle_call(stop, pid(), state()) -> {stop, normal, ok, state()}.
-handle_call({handle_request, Request}, _From, State) ->
-    {ok, Result} = 
-handle_call(stop, _From, State) ->
-    {stop, normal, ok, State}.
+handle_call(_Request, _From, _State) ->
+  error(badarg).
 
--spec handle_cast(any(), state()) -> no_return().
 handle_cast(_Request, _State) ->
-    error(badarg).
+  error(badarg).
 
--spec handle_info({pid(), {data, binary()}}, state()) -> {noreply, state(), {continue, decode}}.
-handle_info({Port, {data, Data}}, #{port := Port, buffer := Buffer} = State) ->
-    {noreply, State#{buffer => <<Buffer/binary, Data/binary>>}, {continue, decode}}.
+handle_info({Port, {data, NewData}}, #{ port := Port, buffer := OldBuffer } = State) ->
+  {noreply, State#{ buffer => <<OldBuffer/binary, NewData/binary>> }, {continue, decode}}.
 
--spec handle_continue(decode, state()) -> {noreply, state(), {continue, {dispatch_messages, [map()]}}}
-                                          | {stop, any(), state()}
-                   ; ({dispatch_messages, []}, state()) -> {noreply, state()}
-                   ; ({dispatch_messages, [map()]}, state()) -> {noreply, state(), {continue, {dispatch_messages, [map()]}}}.
-handle_continue(decode, #{buffer := Buffer} = State) ->
-    case rebar3_bsp_protocol:decode_packets(Buffer) of
-        {ok, Messages, RestData} ->
-            {noreply, State#{buffer => RestData}, {continue, {dispatch_messages, Messages}}};
-        {error, Reason} ->
-            {stop, Reason, State}
-    end;
-handle_continue({dispatch_messages, []}, State) ->
-    {noreply, State};
-handle_continue({dispatch_messages, [M|Ms]}, State) ->
-    {noreply, handle_message(M, State), {continue, {dispatch_messages, Ms}}}.
+handle_continue(decode, #{ buffer := Buffer, messages := OldMsgs } = State) ->
+  case rebar3_bsp_protocol:decode_packets(Buffer) of
+    {ok, NewMsgs, RestData} ->
+      {noreply, State#{ buffer => RestData, messages => OldMsgs ++ NewMsgs }, {continue, messages}};
+    {error, Reason} ->
+      {stop, State, {decode_error, Reason}}
+  end;
+handle_continue(messages, #{ messages := [] } = State) ->
+  {noreply, State};
+handle_continue(messages, State) ->
+  {noreply, handle_message(State), {continue, messages}}.
 
-%%==============================================================================
-%% Internal Functions
-%%==============================================================================
--spec find_io_fds() -> {integer(), integer(), integer()}.
-find_io_fds() ->
-    IoFdString = os:getenv(?IO_FDS_ENV_VARIABLE, ?DEFAULT_IO_FDS),
-    {ok, [InFd, OutFd, ErrFd], _Garbage} = io_lib:fread("~d ~d ~d", IoFdString),
-    {InFd, OutFd, ErrFd}.
+handle_message(#{ messages := [M|Ms] } = State) ->
+  MessageType = rebar3_bsp_protocol:message_type(M),
+  case dispatch_message(MessageType, M, State#{ messages => Ms }) of
+    {response, Reply, NewState} ->
+      ok = send_message(Reply, NewState),
+      NewState;
+    {noresponse, NewState} ->
+      NewState
+  end.
 
--spec handle_message(map(), state()) -> state().
-handle_message(#{id := Id, method := Method, params := Params},
-               #{port := Port, server_state := ServerState, rebar3_state := R3State} = State) ->
-    %% message is a request
-    {Result, NewServerState, NewR3State} = rebar3_bsp_methods:Method(Params, ServerState, R3State),
-    Response = rebar3_bsp_protocol:response(Id, Result),
-    erlang:port_command(Port, Response),
-    State#{server_state => NewServerState, rebar3_state => NewR3State};
-handle_message(#{id := _Id, result := _Result, error:= _Error}, State) ->
-    %% message is a response -- todo
-    State;
-handle_message(#{method := Method, params := Params},
-               #{server_state := ServerState, rebar3_state := R3State} = State) ->
-    %% message is a notification
-    {ok, NewServerState, NewR3State} = rebar3_bsp_methods:Method(Params, ServerState, R3State),
-    State#{server_state => NewServerState, rebar3_state => NewR3State}.
+send_message(Message, #{ port := Port } = _State) ->
+  ok = rebar3_bsp_protocol:send_message(Port, Message),
+  ok.
+
+dispatch_message(request, #{ id := Id } = Message, State) ->
+  case try_dispatch(Message, State) of
+    {response, Result, NewState} ->
+      {response, rebar3_bsp_protocol:response(Id, Result), NewState};
+    {error, Error, NewState} ->
+      {response, rebar3_bsp_protocol:error(Id, Error), NewState};
+    {noresponse, NewState} ->
+      {response, rebar3_bsp_protocol:response(Id, null), NewState}
+  end;
+dispatch_message(response, Message, State) ->
+  ?LOG_WARNING("Ignoring response ~p", [Message]),
+  {noresponse, State};
+dispatch_message(notification, Message, State) ->
+  case try_dispatch(Message, State) of
+    {response, Result, NewState} ->
+      ?LOG_WARNING("Unexpected response to notification [notification=~p] [response=~p]",
+                   [Message, Result]),
+      {noresponse, NewState};
+    {error, Error, NewState} ->
+      {response, rebar3_bsp_protocol:error(null, Error), NewState};
+    {noresponse, NewState} ->
+      {noresponse, NewState}
+  end.
+
+try_dispatch(#{ method := Method } = Message, State) ->
+  Params = maps:get(params, Message, #{}),
+  case erlang:function_exported(rebar3_bsp_methods, Method, 2) of
+    false ->
+      %% XXX hard coded stuff is evil, -32601 means MethodNotFound
+      {error, #{ code => -32601, message => <<"Unsupported method ", Params/binary>> }, State};
+    true ->
+      rebar3_bsp_methods:Method(Params, State)
+  end.
 

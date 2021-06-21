@@ -2,36 +2,22 @@
 %% The Build Server Protocol
 %%==============================================================================
 -module(rebar3_bsp_protocol).
--behavior(gen_server).
 
 %%==============================================================================
 %% Exports
 %%==============================================================================
 
-%% Protocol Participant (either end) API
--export([ start_link/5
-        , start_link/4
-        ]).
-
-%% gen_server API
--export([ init/1
-        , handle_call/3
-        , handle_cast/2
-        , handle_info/2
-        , handle_continue/2
-        , terminate/2
-        , code_change/3
-        , format_status/2
-        ]).
-
 %% Message API
--export([ message_type/1 ]).
+-export([ message_type/1
+        , send_message/2
+        ]).
 
 %% Encoding API
 -export([ notification/2
         , request/3
         , response/2
         , error/2
+        , encode_content/1
         ]).
 
 %% Decoding API
@@ -47,131 +33,9 @@
 -include("rebar3_bsp.hrl").
 
 %%==============================================================================
-%% Protocol Participant API
-%%==============================================================================
--type state() :: #{ mod := module()
-                  , port := port() | pid()
-                  , owned_port := boolean()
-                  , buffer := binary()
-                  , inner_state := term()
-                  }.
-
-start_link(ServerName, Module, Args, PortSpec, Options) ->
-  gen_server:start_link(ServerName, ?MODULE, {Module, Args, PortSpec}, Options).
-
-start_link(Module, Args, PortSpec, Options) ->
-  gen_server:start_link(?MODULE, {Module, Args, PortSpec}, Options).
-
-init({Module, Args, PortSpec}) ->
-  {OwnedPort, Port} = init_port(PortSpec),
-  OuterState = #{ mod => Module
-                , port => Port
-                , owned_port => OwnPort
-                , buffer => <<>>
-                },
-  case Module:init(Args) of
-    {ok, InnerState} ->
-      {ok, OuterState#{ inner_state => InnerState }};
-    {ok, InnerState, Options} ->
-      {ok, OuterState#{ inner_state => InnerState }, Options};
-    {stop, Reason} ->
-      {stop, Reason};
-    ignore ->
-      ignore
-  end.
-
-init_port({reuse_port, Port}) ->
-  {false, Port};
-init_port({open_port, PortName, PortSettings}) ->
-  {true, erlang:open_port(PortName, PortSettings)}.
-
-fini_port(#{ port := Port, owned_port := true }) ->
-  Port ! {self(), close},
-  ok;
-fini_port(_) ->
-  ok.
-
-handle_call(Request, From, OuterState) ->
-  dispatch(handle_call, [Request, From], OuterState).
-
-handle_cast(Request, OuterState) ->
-  dispatch(handle_cast, [Request], OuterState).
-
-handle_info({Port, {data, Data}}, #{ port := Port, buffer := Buffer } = OuterState) ->
-  {noreply, OuterState#{buffer => <<Buffer/binary, Data/binary>>}, {continue, '$bsp_decode'}};
-handle_info(Info, #{ mod := Mod} = OuterState) ->
-  case erlang:function_exported(Mod, handle_info, 2) of
-    true ->
-      dispatch(handle_info, [Info], OuterState);
-    false ->
-      ?LOG_WARNING("Discarding unexpected message ~p", [Info]),
-      {noreply, OuterState}
-  end.
-
-handle_continue('$bsp_decode', #{ buffer := Buffer } = OuterState) ->
-  case ?MODULE:decode_packets(Buffer) of
-    {ok, Messages, RestData} ->
-      {noreply, OuterState#{ buffer => RestData }, {continue, {'$bsp_dispatch_messages', Messages}}};
-    {error, Reason} ->
-      {stop, Reason, OuterState}
-  end;
-handle_continue({'$bsp_dispatch_messages', []}, OuterState) ->
-  {noreply, OuterState};
-handle_continue({'$bsp_dispatch_messages', [M|Ms]}, OuterState) ->
-  NewOuterState = handle_message(M, OuterState),
-  {noreply, NewOuterState, {continue, {'$bsp_dispatch_messages', Ms}}};
-handle_continue(Continue, OuterState) ->
-  
-
-terminate(Reason, #{ mod := Mod, inner_state := InnerState } = OuterState) ->
-  case erlang:function_exported(Mod, terminate, 2) of
-    true ->
-      Mod:terminate(Reason, InnerState);
-    false ->
-      ok
-  end,
-  fini_port(OuterState),
-  ok.
-  
-code_change(OldVsn, #{ mod := Mod, inner_state := InnerState } = OuterState, Extra) ->
-  case catch Mod:code_change(OldVsn, InnerState, Extra) of
-    {ok, NewInnerState} ->
-      {ok, OuterState#{ inner_state => NewInnerState }};
-    Else ->
-      Else
-  end.
-
-format_status(Opt, [PDict, #{ mod := Mod, inner_state := InnerState } = OuterState]) ->
-  FormattedInnerState = case erlang:function_exported(Mod, format_status, 2) of
-                          true ->
-                            Mod:format_status(Opt, [PDict, InnerState]);
-                          false ->
-                            InnerState
-                        end,
-  OuterState#{ inner_state => FormattedInnerState, rebar3_state => rebar3_state }.
-
-dispatch(Func, Args, #{ mod := Mod, inner_state := InnerState } = OuterState) ->
-  case erlang:apply(Mod, Func, Args ++ [InnerState]) of
-    {reply, Reply, NewInnerState} ->
-      {reply, Reply, OuterState#{ inner_state => NewInnerState }};
-    {reply, Reply, NewInnerState, Options} ->
-      {reply, Reply, OuterState#{ inner_state => NewInnerState }, Options};
-    {noreply, NewInnerState} ->
-      {noreply, OuterState#{ inner_state => NewInnerState }};
-    {noreply, NewInnerState, Options} ->
-      {noreply, OuterState#{ inner_state => NewInnerState }, Options};
-    {stop, Reason, Reply, NewInnerState} ->
-      {stop, Reason, Reply, OuterState#{ inner_state => NewInnerState }};
-    {stop, Reason, NewInnerState} ->
-      {stop, Reason, OuterState#{ inner_state => NewInnerState }};
-    Result ->
-      Result
-  end.
-    
-
-%%==============================================================================
 %% Message API
 %%==============================================================================
+-spec message_type(map()) -> request | response | notification.
 message_type(Message) ->
   case Message of
     %% Request - always has id and method
@@ -183,7 +47,15 @@ message_type(Message) ->
     %% Notification - doesn't have an id, always has a method
     #{ method := _Method } ->
       notification
-  end.  
+  end.
+
+-spec send_message(port() | pid(), map()) -> ok.
+send_message(Port, Message) when is_port(Port) ->
+  true = port_command(Port, encode_content(Message)),
+  ok;
+send_message(Port, Message) when is_pid(Port) ->
+  Port ! {self(), {command, encode_content(Message)}},
+  ok.
 
 %%==============================================================================
 %% Encoding API
@@ -217,6 +89,10 @@ error(RequestId, Error) ->
    , id      => RequestId
    , error   => Error
    }.
+
+-spec encode_content(map()) -> binary().
+encode_content(Content) ->
+  content(jsx:encode(Content)).
 
 %%==============================================================================
 %% Decoding API

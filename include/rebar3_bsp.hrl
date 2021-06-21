@@ -1,4 +1,9 @@
 %%==============================================================================
+%% Global Includes
+%%==============================================================================
+-include_lib("kernel/include/logger.hrl").
+
+%%==============================================================================
 %% Macro Definitions
 %%==============================================================================
 -define(JSONRPC_VSN, <<"2.0">>).
@@ -16,11 +21,6 @@
 
 %% Remember: in map type specs, := means _mandatory_ and => means _optional_
 %% We use binary() to mean JSON string
-
-%% Internal server state
--type server_state() :: #{ is_initialized := boolean()
-                         , is_shutdown := boolean()
-                         }.
 
 %% Base protocol
 -type array() :: list().

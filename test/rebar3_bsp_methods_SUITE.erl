@@ -50,7 +50,9 @@ init_per_testcase(_TestCase, Config) ->
   {ok, State} = erl_subgraph_compile:init(rebar_state:new(RebarConfig)),
   {ok, EchoPort} = rebar3_bsp_echo_port:start_link(),
   {ok, ClientPid} = rebar3_bsp_client:start_link({port, EchoPort}),
-  {ok, ServerPid} = rebar3_bsp_server:start_link({State, {port, EchoPort}, undefined}),
+  {ok, ServerPid} = rebar3_bsp_server:start_link(#{ rebar3_state => State
+                                                  , port => EchoPort
+                                                  }),
   ok = rebar3_bsp_echo_port:set_endpoints(EchoPort, ClientPid, ServerPid),
   [{cwd, Cwd}, {echo_port, EchoPort}] ++ Config.
 

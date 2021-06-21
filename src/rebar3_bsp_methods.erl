@@ -17,44 +17,44 @@
 -include("rebar3_bsp.hrl").
 
 -define(REQUEST_SPEC(Method, ParamType, ResultType),
-        Method(ParamType, server_state(), rebar3_state:t()) ->
-               {ResultType, server_state(), rebar3_state:t()}).
+        Method(ParamType, rebar3_bsp_server:state()) ->
+               {response, ResultType, rebar3_bsp_server:state()}).
 
 -define(NOTIFICATION_SPEC(Method, ParamType),
-        Method(ParamType, server_state(), rebar3_state:t()) ->
-               {ok, server_state(), rebar3_state:t()}).
+        Method(ParamType, rebar3_bsp_server:state()) ->
+               {noresponse, rebar3_bsp_server:state()}).
 
 -spec ?REQUEST_SPEC('build/initialize', initializeBuildParams(), initializeBuildResult()).
-'build/initialize'(_Params, ServerState, R3State) ->
+'build/initialize'(_Params, ServerState) ->
   Result = #{ displayName => <<"rebar3_bsp">>
             , version => rebar3_bsp_connection:version(?BSP_APPLICATION)
             , bspVersion => ?BSP_VSN
             , capabilities => #{}
             },
-  {Result, ServerState, R3State}.
+  {response, Result, ServerState}.
 
 -spec ?NOTIFICATION_SPEC('build/initialized', initializedBuildParams()).
-'build/initialized'(#{}, ServerState, R3State) ->
+'build/initialized'(#{}, #{rebar3_state := R3State} = ServerState) ->
     {ok, NewR3State} = rebar3:run(R3State, ["compile"]),
-    {ok, ServerState#{is_initialized => true}, NewR3State}.
+    {noresponse, ServerState#{is_initialized => true, rebar3_state => NewR3State}}.
 
 -spec ?REQUEST_SPEC('build/shutdown', null, null).
-'build/shutdown'(null, ServerState, R3State) ->
-    {null, ServerState#{is_shutdown => true}, R3State}.
+'build/shutdown'(null, ServerState) ->
+    {response, null, ServerState#{is_shutdown => true}}.
 
 -spec ?NOTIFICATION_SPEC('build/exit', null).
-'build/exit'(null, ServerState, R3State) ->
-    ExitCode = case ServerState of
-        #{is_shutdown := true} ->
+'build/exit'(null, #{is_shutdown := IsShutdown} = ServerState) ->
+    ExitCode = case IsShutdown of
+        true ->
             0;
-        _ ->
+        false ->
             1
     end,
     erlang:halt(ExitCode),
-    {ok, ServerState, R3State}.
+    {noresponse, ServerState}.
 
 -spec ?REQUEST_SPEC('workspace/buildTargets', workspaceBuildTargetsParams(), workspaceBuildTargetsResult()).
-'workspace/buildTargets'(_Params, ServerState, R3State) ->
+'workspace/buildTargets'(_Params, #{rebar3_state := R3State} = ServerState) ->
     BuildTargets = [#{ id => #{ uri => atom_to_binary(Profile) }
                      , tags => []
                      , capabilities => #{ canCompile => true
@@ -66,22 +66,22 @@
                      , dependencies => []
                      }
                     || Profile <- rebar_state:current_profiles(R3State)],
-    {#{targets => BuildTargets}, ServerState, R3State}.
+    {response, #{targets => BuildTargets}, ServerState}.
 
 -spec ?REQUEST_SPEC('workspace/reload', null, null).
-'workspace/reload'(null, ServerState, R3State) ->
+'workspace/reload'(null, ServerState) ->
     %% TODO
-    {null, ServerState, R3State}.
+    {reply, null, ServerState}.
 
 -spec ?REQUEST_SPEC('buildTarget/sources', buildTargetSourcesParams(), buildTargetSourcesResult()).
-'buildTarget/sources'(#{targets := Targets}, ServerState, R3State) ->
-    Items = items(rebar_state:project_apps(R3State), Targets, R3State),
-    {#{items => Items}, ServerState, R3State}.
+'buildTarget/sources'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->
+    Items = items(rebar_state:project_apps(R3State), Targets),
+    {response, #{items => Items}, ServerState}.
 
 -spec ?REQUEST_SPEC('buildTarget/dependencySources', dependencySourcesParams(), dependencySourcesResult()).
-'buildTarget/dependencySources'(#{targets := Targets}, ServerState, R3State) ->
+'buildTarget/dependencySources'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->
     Items = items(rebar_state:all_deps(R3State), Targets, R3State),
-    {#{items => Items}, ServerState, R3State}.
+    {response, #{items => Items}, ServerState}.
 
 %% Internal Functions
 

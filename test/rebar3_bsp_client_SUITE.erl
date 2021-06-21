@@ -30,6 +30,7 @@
 init_per_suite(Config) ->
   %% Required for the application environment to be loaded
   application:load(rebar3_bsp),
+  rebar3_bsp_connection:generate(sample_app_dir()),
   Config.
 
 -spec end_per_suite(config()) -> ok.
@@ -47,7 +48,7 @@ init_per_testcase(_TestCase, Config) ->
   %% TODO: Find a simpler solution
   os:cmd("rebar3 compile"),
   %% TODO: CT is leaking processes
-  {ok, _} = rebar3_bsp_client:start_link(RootPath),
+  {ok, _} = rebar3_bsp_client:start_link({root, RootPath}),
   [{cwd, Cwd} | Config].
 
 -spec end_per_testcase(atom(), config()) -> ok.
@@ -66,14 +67,14 @@ all() ->
 %%==============================================================================
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
-  Result = rebar3_bsp_client:build_initialize(#{}),
+  Result = rebar3_bsp_client:send_request('build/initialize', #{}),
   Expected = #{ id => 1
               , jsonrpc => <<"2.0">>
               , result =>
                   #{ bspVersion => <<"2.0.0">>
                    , capabilities => #{}
                    , displayName => <<"rebar3_bsp">>
-                   , version => <<"0.1.0">>
+                   , version => rebar3_bsp_connection:version(rebar3_bsp)
                    }},
   ?assertEqual(Expected, Result),
   ok.

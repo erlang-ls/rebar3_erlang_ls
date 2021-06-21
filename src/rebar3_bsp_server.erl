@@ -124,7 +124,8 @@ dispatch_message(notification, Message, State) ->
 
 try_dispatch(#{ method := Method } = Message, State) ->
   Params = maps:get(params, Message, #{}),
-  case erlang:function_exported(rebar3_bsp_methods, Method, 2) of
+  MethodAtom = erlang:binary_to_atom(Method),
+  case erlang:function_exported(rebar3_bsp_methods, MethodAtom, 2) of
     false ->
       %% XXX hard coded stuff is evil, -32601 means MethodNotFound
       {error, #{ code => -32601, message => <<"Unsupported method ", Params/binary>> }, State};

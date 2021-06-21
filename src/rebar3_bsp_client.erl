@@ -74,7 +74,7 @@ stop() ->
   gen_server:call(?SERVER, stop).
 
 send_request(Method, Params) ->
-  gen_server:call(?SERVER, {send_request, Method, Params}, infinity).
+  gen_server:call(?SERVER, {send_request, Method, Params}).
 
 send_notification(Method, Params) ->
   gen_server:call(?SERVER, {send_notification, Method, Params}).

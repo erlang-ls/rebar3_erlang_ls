@@ -87,8 +87,8 @@ handle_continue(messages, State) ->
 handle_message(#{ messages := [M|Ms] } = State) ->
   MessageType = rebar3_bsp_protocol:message_type(M),
   case dispatch_message(MessageType, M, State#{ messages => Ms }) of
-    {response, Reply, NewState} ->
-      ok = send_message(Reply, NewState),
+    {response, _Reply, NewState} ->
+     %% ok = send_message(Reply, NewState),
       NewState;
     {noresponse, NewState} ->
       NewState

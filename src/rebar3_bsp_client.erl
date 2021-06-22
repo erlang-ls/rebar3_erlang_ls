@@ -80,7 +80,10 @@ start_link({port, Port}) ->
 
 -spec stop() -> ok.
 stop() ->
-  gen_server:stop(?SERVER).
+  RequestId = send_request('build/shutdown', null),
+  {ok, _Response} = receive_response(RequestId, infinity),
+  ok = send_notification('build/exit', null),
+  ok.
 
 -spec send_request(method(), params()) -> any().
 send_request(Method, Params) ->
@@ -145,7 +148,7 @@ init(PortSpec) ->
                  ?CALL_SPEC(get_notifications,                  {reply, [notificationMessage()], state()}).
 handle_call({send_request, Method, Params}, From,
             #state{port = Port, request_id = RequestId, pending = Pending} = State) ->
-  EffectiveParams = maps:merge(default_params(Method), Params),
+  EffectiveParams = effective_params(Method, Params),
   Content = rebar3_bsp_protocol:request(RequestId, Method, EffectiveParams),
   ok = rebar3_bsp_protocol:send_message(Port, Content),
   {noreply, State#state{ request_id = RequestId + 1
@@ -158,7 +161,7 @@ handle_call(get_notifications, _From, #state{ notifications = Notifications } = 
 
 -spec handle_cast({send_notification, binary(), params()}, state()) -> {noreply, state()}.
 handle_cast({send_notification, Method, Params}, #state{port = Port} = State) ->
-  EffectiveParams = maps:merge(default_params(Method), Params),
+  EffectiveParams = effective_params(Method, Params),
   Content = rebar3_bsp_protocol:notification(Method, EffectiveParams),
   ok = rebar3_bsp_protocol:send_message(Port, Content),
   {noreply, State}.
@@ -168,7 +171,9 @@ handle_cast({send_notification, Method, Params}, #state{port = Port} = State) ->
 handle_info({Port, {data, NewData}}, #state{port = Port, buffer = OldBuffer} = State) ->
   {noreply, State#state{ buffer = <<OldBuffer/binary, NewData/binary>> }, {continue, decode}};
 handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) ->
-  {stop, {exit_status, Status}, State#state{port = undefined}}.
+  {stop, {exit_status, Status}, State#state{port = undefined}};
+handle_info({'EXIT', Port, normal}, #state{port = Port} = State) ->
+  {stop, normal, State#state{port = undefined}}.
 
 -spec handle_continue(decode, state()) -> {noreply, state(), {continue, messages}} | {stop, state(), {decode_error, any()}};
                      (messages, state()) -> {noreply, state()} | {noreply, state(), {continue, messages}}.
@@ -212,6 +217,12 @@ handle_message(response, #{ id := Id } = M, #state{ pending = Pending } = State)
                end,
   State#state{ pending = NewPending }.
 
+-spec effective_params(binary(), map() | null) -> map() | null.
+effective_params(Method, Params) when is_map(Params) ->
+  maps:merge(default_params(Method), Params);
+effective_params(_Method, null) ->
+  null.
+
 -spec default_params(binary()) -> params().
 default_params(<<"build/initialize">>) ->
   #{ displayName  => <<"Rebar3 BSP Client">>
@@ -233,4 +244,3 @@ unpeel_response(#{ error := Error }) ->
   {error, Error};
 unpeel_response(#{ result := Result}) ->
   {ok, Result}.
-

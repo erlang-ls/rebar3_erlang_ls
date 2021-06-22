@@ -10,6 +10,7 @@
         , handle_cast/2
         , handle_info/2
         , handle_continue/2
+        , format_status/2
         ]).
 
 -include("rebar3_bsp.hrl").
@@ -94,6 +95,9 @@ handle_continue(messages, #{ messages := [] } = State) ->
 handle_continue(messages, State) ->
   {noreply, handle_message(State), {continue, messages}}.
 
+format_status(_Opt, [_PDict, State]) ->
+  State#{ rebar3_state => rebar3_state_redacted }.
+
 handle_message(#{ messages := [M|Ms] } = State) ->
   MessageType = rebar3_bsp_protocol:message_type(M),
   case dispatch_message(MessageType, M, State#{ messages => Ms }) of
@@ -129,7 +133,9 @@ dispatch_message(notification, Message, State) ->
     {error, Error, NewState} ->
       {response, rebar3_bsp_protocol:error(null, Error), NewState};
     {noresponse, NewState} ->
-      {noresponse, NewState}
+      {noresponse, NewState};
+    {stop, ExitCode, NewState} ->
+      {stop, ExitCode, NewState}
   end.
 
 try_dispatch(#{ method := Method } = Message, State) ->
@@ -152,4 +158,3 @@ ensure_binary(X) when is_binary(X) ->
   X;
 ensure_binary(X) when is_list(X) ->
   list_to_binary(X).
-

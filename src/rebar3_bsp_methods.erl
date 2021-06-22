@@ -23,7 +23,7 @@
 
 -define(NOTIFICATION_SPEC(Method, ParamType),
         Method(ParamType, rebar3_bsp_server:state()) ->
-           {noresponse, rebar3_bsp_server:state()}).
+           {noresponse, rebar3_bsp_server:state()} | {stop, integer(), rebar3_bsp_server:state()}).
 
 -spec ?REQUEST_SPEC('build/initialize', initializeBuildParams(), initializeBuildResult()).
 'build/initialize'(_Params, ServerState) ->
@@ -43,15 +43,15 @@
 'build/shutdown'(null, ServerState) ->
   {response, null, ServerState#{is_shutdown => true}}.
 
--spec 'build/exit'(null, rebar3_bsp_server:state()) -> no_return().
-'build/exit'(null, #{is_shutdown := IsShutdown} = _ServerState) ->
+-spec ?NOTIFICATION_SPEC('build/exit', null).
+'build/exit'(null, #{is_shutdown := IsShutdown} = ServerState) ->
   ExitCode = case IsShutdown of
                true ->
                  0;
                false ->
                  1
              end,
-  erlang:halt(ExitCode).
+  {stop, ExitCode, ServerState}.
 
 -spec ?REQUEST_SPEC('workspace/buildTargets', workspaceBuildTargetsParams(), workspaceBuildTargetsResult()).
 'workspace/buildTargets'(_Params, #{rebar3_state := R3State} = ServerState) ->
@@ -89,7 +89,7 @@
 
 %% Internal Functions
 
--spec items([atom()], [buildTargetIdentifier()], rebar3_state:t()) -> [sourcesItem()]. 
+-spec items([atom()], [buildTargetIdentifier()], rebar3_state:t()) -> [sourcesItem()].
 items(Items, Targets, R3State) ->
   Applications = rebar_state:Items(R3State),
   TargetProfiles = [erlang:binary_to_atom(Uri) || #{ uri := Uri } <- Targets],
@@ -109,4 +109,3 @@ items(Items, Targets, R3State) ->
                 end, #{}, TargetsAndApps),
   [ #{ target => Target, sources => Sources, roots => Roots}
     || {Target, {Sources, Roots}} <- maps:to_list(TargetMap)].
-

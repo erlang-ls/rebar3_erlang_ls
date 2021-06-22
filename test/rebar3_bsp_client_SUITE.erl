@@ -30,30 +30,23 @@
 init_per_suite(Config) ->
   %% Required for the application environment to be loaded
   application:load(rebar3_bsp),
-  rebar3_bsp_connection:generate(sample_app_dir()),
+  rebar3_bsp_connection:generate(rebar3_bsp_test:sample_app_dir()),
   Config.
 
 -spec end_per_suite(config()) -> ok.
-end_per_suite(Config) ->
-  file:set_cwd(?config(cwd, Config)),
+end_per_suite(_Config) ->
   ok.
 
 -spec init_per_testcase(atom(), config()) -> config().
-init_per_testcase(_TestCase, Config) ->
-  {ok, Cwd} = file:get_cwd(),
-  RootPath = sample_app_dir(),
-  ok = file:set_cwd(RootPath),
-  %% Trigger an explicit compilation, so that the pre_compile hook is executed
-  %% and a symlink is created for the plugin, pointing to the same repo
-  %% TODO: Find a simpler solution
-  os:cmd("rebar3 compile"),
-  %% TODO: CT is leaking processes
-  {ok, _} = rebar3_bsp_client:start_link({root, RootPath}),
-  [{cwd, Cwd} | Config].
+init_per_testcase(TestCase, Config) ->
+  Config1 = rebar3_bsp_test:init_sample_app_testcase(TestCase, Config),
+  {ok, _Pid} = rebar3_bsp_client:start_link({root, rebar3_bsp_test:sample_app_dir()}),
+  Config1.
 
 -spec end_per_testcase(atom(), config()) -> ok.
-end_per_testcase(_TestCase, _Config) ->
-  rebar3_bsp_client:stop(),
+end_per_testcase(TestCase, Config) ->
+  ok = rebar3_bsp_test:end_sample_app_testcase(TestCase, Config),
+  ok = rebar3_bsp_client:stop(),
   ok.
 
 -spec all() -> [atom()].
@@ -67,22 +60,12 @@ all() ->
 %%==============================================================================
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
-  RequestId = rebar3_bsp_client:send_request('build/initialize', #{}),
-  {ok, Result} = rebar3_bsp_client:receive_response(RequestId, 30 * 1000),
-  Expected = #{ id => 1
-              , jsonrpc => <<"2.0">>
-              , result =>
-                  #{ bspVersion => <<"2.0.0">>
-                   , capabilities => #{}
-                   , displayName => <<"rebar3_bsp">>
-                   , version => rebar3_bsp_connection:version(rebar3_bsp)
-                   }},
+  {ok, Result} = rebar3_bsp_test:client_request('build/initialize', #{}, 30 * 1000),
+  Expected = #{ bspVersion => <<"2.0.0">>
+              , capabilities => #{}
+              , displayName => <<"rebar3_bsp">>
+              , version => rebar3_bsp_connection:version(rebar3_bsp)
+              },
   ?assertEqual(Expected, Result),
   ok.
 
-%%==============================================================================
-%% Internal Functions
-%%==============================================================================
--spec sample_app_dir() -> file:filename().
-sample_app_dir() ->
-  filename:join([code:priv_dir(rebar3_bsp), "sample"]).

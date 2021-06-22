@@ -67,7 +67,8 @@ all() ->
 %%==============================================================================
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
-  Result = rebar3_bsp_client:send_request('build/initialize', #{}),
+  RequestId = rebar3_bsp_client:send_request('build/initialize', #{}),
+  {ok, Result} = rebar3_bsp_client:receive_response(RequestId, 30 * 1000),
   Expected = #{ id => 1
               , jsonrpc => <<"2.0">>
               , result =>

@@ -5,6 +5,7 @@
         , 'build/shutdown'/2
         , 'workspace/buildTargets'/2
         , 'workspace/reload'/2
+        , 'buildTarget/compile'/2
         , 'buildTarget/sources'/2
         , 'buildTarget/dependencySources'/2
         ]).
@@ -82,9 +83,9 @@
   Items = items(all_deps, Targets, R3State),
   {response, #{items => Items}, ServerState}.
 
-%% -spec ?REQUEST_SPEC('buildTarget/compile', compileParams(), compileResult()).
-%% 'buildTarget/compile'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->
-  
+-spec ?REQUEST_SPEC('buildTarget/compile', compileParams(), compileResult()).
+'buildTarget/compile'(#{targets := Targets}, #{rebar3_state := _R3State} = ServerState) ->
+  {response, #{ statusCode => 0 }, ServerState}.
 
 %% Internal Functions
 

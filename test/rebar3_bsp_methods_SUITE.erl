@@ -45,7 +45,8 @@ end_per_suite(Config) ->
 -spec init_per_testcase(atom(), config()) -> config().
 init_per_testcase(_TestCase, Config) ->
   {ok, Cwd} = file:get_cwd(),
-  ok = file:set_cwd(sample_app_dir()),
+  SampleAppDir = sample_app_dir(),
+  ok = file:set_cwd(SampleAppDir),
   {ok, RebarConfig} = file:consult("rebar.config"),
   State = rebar_state:new(RebarConfig),
   {ok, EchoPort} = rebar3_bsp_echo_port:start_link(),
@@ -54,7 +55,7 @@ init_per_testcase(_TestCase, Config) ->
                                                   , port => EchoPort
                                                   }),
   ok = rebar3_bsp_echo_port:set_endpoints(EchoPort, {ClientPid, ServerPid}),
-  [{cwd, Cwd}, {echo_port, EchoPort}] ++ Config.
+  [{sample_app_dir, SampleAppDir}, {cwd, Cwd}, {echo_port, EchoPort}] ++ Config.
 
 -spec end_per_testcase(atom(), config()) -> ok.
 end_per_testcase(_TestCase, Config) ->
@@ -62,6 +63,8 @@ end_per_testcase(_TestCase, Config) ->
   ok = rebar3_bsp_server:stop(),
   EchoPort = proplists:get_value(echo_port, Config),
   ok = rebar3_bsp_echo_port:stop(EchoPort),
+  Cwd = proplists:get_value(cwd, Config),
+  ok = file:set_cwd(Cwd),
   ok.
 
 -spec all() -> [atom()].
@@ -98,7 +101,7 @@ workspace_buildtargets(_Config) ->
 
 -spec buildtarget_compile(config()) -> ok.
 buildtarget_compile(_Config) ->
-  {ok, Result} = client_request('buildTarget/compile', #{}),
+  {ok, Result} = client_request('buildTarget/compile', #{ targets => []}),
   ?assertEqual(#{ statusCode => 0 }, Result),
   ok.
 
@@ -108,16 +111,18 @@ buildtarget_sources(_Config) ->
   {ok, Result} = client_request('buildTarget/sources', targets([<<"default">>])),
   #{ items := [Item] } = Result,
   #{ roots := [Root] } = Item,
-  ?assertEqual(Root, sample_app_dir()),
+  ?assertEqual(sample_app_dir(), Root),
   ok.
 
 -spec buildtarget_dependencysources(config()) -> ok.
-buildtarget_dependencysources(Config) ->
+buildtarget_dependencysources(_Config) ->
   initialize_server(),
   {ok, Result} = client_request('buildTarget/dependencySources', targets([<<"default">>])),
-  Cwd = proplists:get_value(cwd, Config),
-  MeckDir = filename:join([Cwd, "_build", "default", "lib", "meck"]),
-  ?assertMatch(#{ items := [#{ roots := [MeckDir] }] }, Result),
+  ExpectedMeckDir = filename:join([sample_app_dir(), "_build", "default", "lib", "meck"]),
+  #{ items := [#{ sources := [#{ generated := false
+                               , kind := ?SOURCE_ITEM_KIND_DIR
+                               , uri := ResultMeckDir }] }] } = Result,
+  ?assertEqual(ExpectedMeckDir, ResultMeckDir),
   ok.
 
 %%==============================================================================
@@ -135,7 +140,9 @@ client_notify(Method, Params) ->
 
 -spec sample_app_dir() -> binary().
 sample_app_dir() ->
-  list_to_binary(filename:join([code:priv_dir(rebar3_bsp), "sample"])).
+  PrivDir = rebar_file_utils:resolve_link(code:priv_dir(rebar3_bsp)),
+  Dir = filename:join([PrivDir, "sample"]),
+  list_to_binary(Dir).
 
 -spec targets([binary()]) -> #{ targets => [#{ uri := binary()}] }.
 targets(Targets) ->

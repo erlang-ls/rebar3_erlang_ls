@@ -48,7 +48,8 @@ simulate_group_leader() ->
   GL = erlang:group_leader(),
   application:set_env(rebar3_bsp, group_leader, GL),
   Pid = spawn_link(fun noop_group_leader/0),
-  erlang:group_leader(Pid, self()).
+  true = erlang:group_leader(Pid, self()),
+  ok.
 
 %% @doc Simulate a group leader but do nothing
 -spec noop_group_leader() -> no_return().

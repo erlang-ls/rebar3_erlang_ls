@@ -49,11 +49,11 @@ init_per_testcase(_TestCase, Config) ->
   {ok, RebarConfig} = file:consult("rebar.config"),
   State = rebar_state:new(RebarConfig),
   {ok, EchoPort} = rebar3_bsp_echo_port:start_link(),
-  {ok, ClientPid} = rebar3_bsp_client:start_link({reuse_port, EchoPort}),
+  {ok, ClientPid} = rebar3_bsp_client:start_link({port, EchoPort}),
   {ok, ServerPid} = rebar3_bsp_server:start_link(#{ rebar3_state => State
                                                   , port => EchoPort
                                                   }),
-  ok = rebar3_bsp_echo_port:set_endpoints(EchoPort, ClientPid, ServerPid),
+  ok = rebar3_bsp_echo_port:set_endpoints(EchoPort, {ClientPid, ServerPid}),
   [{cwd, Cwd}, {echo_port, EchoPort}] ++ Config.
 
 -spec end_per_testcase(atom(), config()) -> ok.
@@ -75,56 +75,75 @@ all() ->
 %%==============================================================================
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
-  Result = rebar3_bsp_client:send_request('build/initialize', #{}),
-  ?assertEqual( #{ bspVersion => rebar3_bsp_connection:version(?BSP_APPLICATION)
+  {ok, Result} = client_request('build/initialize', #{}),
+  ?assertEqual( #{ bspVersion => ?BSP_VSN
                  , capabilities => #{}
                  , displayName => <<"rebar3_bsp">>
-                 , version => rebar3_bsp_connection:version(rebar)
+                 , version => rebar3_bsp_connection:version(rebar3_bsp)
                  }, Result),
   ok.
 
 -spec build_initialized(config()) -> ok.
 build_initialized(_Config) ->
-  Result = rebar3_bsp_client:send_notification('build/initialized', #{}),
+  {ok, _Result} = client_request('build/initialize', #{}),
+  Result = client_notify('build/initialized', #{}),
   ?assertEqual(ok, Result),
   ok.
 
 -spec workspace_buildtargets(config()) -> ok.
 workspace_buildtargets(_Config) ->
-  Result = rebar3_bsp_client:send_request('workspace/buildTargets', #{}),
-  ?assertEqual(#{ targets => [#{ id => <<"default">>}] }, Result),
+  {ok, Result} = client_request('workspace/buildTargets', #{}),
+  ?assertMatch(#{ targets := [#{ id := #{ uri := <<"default">> } }] }, Result),
   ok.
 
 -spec buildtarget_compile(config()) -> ok.
 buildtarget_compile(_Config) ->
-  Result = rebar3_bsp_client:send_request('buildTarget/compile', #{}),
+  {ok, Result} = client_request('buildTarget/compile', #{}),
   ?assertEqual(#{ statusCode => 0 }, Result),
   ok.
 
 -spec buildtarget_sources(config()) -> ok.
 buildtarget_sources(_Config) ->
-  %% Ensure the default build target is initialized
-  rebar3_bsp_client:send_request('build/initialize', #{}),
-  rebar3_bsp_client:send_notification('build/initialized', #{}),
-  Params = #{ targets => [<<"default">>] },
-  Result = rebar3_bsp_client:send_request('buildTarget/sources', Params),
-  {ok, Cwd} = file:get_cwd(),
-  ?assertEqual(#{ items => [Cwd] }, Result),
+  initialize_server(),
+  {ok, Result} = client_request('buildTarget/sources', targets([<<"default">>])),
+  #{ items := [Item] } = Result,
+  #{ roots := [Root] } = Item,
+  ?assertEqual(Root, sample_app_dir()),
   ok.
 
 -spec buildtarget_dependencysources(config()) -> ok.
-buildtarget_dependencysources(_Config) ->
-  %% Ensure the default build target is initialized
-  _Result = rebar3_bsp_agent:handle_request(<<"build/initialized">>, #{}),
-  Params = #{ targets => [<<"default">>] },
-  Result = rebar3_bsp_agent:handle_request(<<"buildTarget/dependencySources">>, Params),
-  {ok, Cwd} = file:get_cwd(),
-  ?assertEqual(#{ items => [filename:join([Cwd, "_build", "default", "lib", "meck"])] }, Result),
+buildtarget_dependencysources(Config) ->
+  initialize_server(),
+  {ok, Result} = client_request('buildTarget/dependencySources', targets([<<"default">>])),
+  Cwd = proplists:get_value(cwd, Config),
+  MeckDir = filename:join([Cwd, "_build", "default", "lib", "meck"]),
+  ?assertMatch(#{ items := [#{ roots := [MeckDir] }] }, Result),
   ok.
 
 %%==============================================================================
 %% Internal Functions
 %%==============================================================================
--spec sample_app_dir() -> file:filename().
+-spec client_request(binary() | atom(), map()) -> any().
+client_request(Method, Params) ->
+  RequestId = rebar3_bsp_client:send_request(Method, Params),
+  rebar3_bsp_client:receive_response(RequestId, 500).
+
+-spec client_notify(binary() | atom(), map()) -> ok.
+client_notify(Method, Params) ->
+  ok = rebar3_bsp_client:send_notification(Method, Params),
+  ok.
+
+-spec sample_app_dir() -> binary().
 sample_app_dir() ->
-  filename:join([code:priv_dir(rebar3_bsp), "sample"]).
+  list_to_binary(filename:join([code:priv_dir(rebar3_bsp), "sample"])).
+
+-spec targets([binary()]) -> #{ targets => [#{ uri := binary()}] }.
+targets(Targets) ->
+  #{ targets => [#{ uri => T } || T <- Targets] }.
+
+-spec initialize_server() -> ok.
+initialize_server() ->
+  {ok, _Result} = client_request('build/initialize', #{}),
+  ok = client_notify('build/initialized', #{}),
+  ok.
+

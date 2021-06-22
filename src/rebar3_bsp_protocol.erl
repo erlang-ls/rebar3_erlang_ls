@@ -60,14 +60,14 @@ send_message(Port, Message) when is_pid(Port) ->
 %%==============================================================================
 %% Encoding API
 %%==============================================================================
--spec notification(binary(), params()) -> binary().
+-spec notification(binary(), params()) -> map().
 notification(Method, Params) ->
   #{ jsonrpc => ?JSONRPC_VSN
    , method  => Method
    , params  => Params
    }.
 
--spec request(requestId(), binary(), params()) -> binary().
+-spec request(requestId(), binary(), params()) -> map().
 request(RequestId, Method, Params) ->
   #{ jsonrpc => ?JSONRPC_VSN
    , id      => RequestId
@@ -76,14 +76,14 @@ request(RequestId, Method, Params) ->
    }.
 
 
--spec response(responseId(), responseResult()) -> binary().
+-spec response(responseId(), responseResult()) -> map().
 response(RequestId, Result) ->
   #{ jsonrpc => ?JSONRPC_VSN
    , id      => RequestId
    , result  => Result
    }.
 
--spec error(responseId(), responseError()) -> binary().
+-spec error(responseId(), responseError()) -> map().
 error(RequestId, Error) ->
   #{ jsonrpc => ?JSONRPC_VSN
    , id      => RequestId
@@ -101,11 +101,11 @@ encode_content(Content) ->
 decode_content(Content) ->
   jsx:decode(Content, [return_maps, {labels, atom}]).
 
--spec decode_packets(binary()) -> {[binary()], binary()}.
+-spec decode_packets(binary()) -> {ok, [map()], binary()} | {error, term()}.
 decode_packets(Data) ->
   decode_packets(Data, []).
 
--spec decode_packets(binary(), [binary()]) -> {[binary()], binary()}.
+-spec decode_packets(binary(), [map()]) -> {ok, [map()], binary()} | {error, term()}.
 decode_packets(Data, Packets) ->
   case decode_packet(Data) of
     {ok, Packet, Rest} ->
@@ -125,7 +125,7 @@ decode_packet(Data) ->
         <<Content:Length/binary, FinalTail/binary>> ->
           {ok, decode_content(Content), FinalTail};
         _ ->
-          {more, undefined} %Length - erlang:byte_size(Rest)}
+          {more, Length - erlang:byte_size(Rest)}
       end;
     {more, More} ->
       {more, More};
@@ -158,5 +158,5 @@ content(Body) ->
   unicode:characters_to_binary([headers(Body), "\r\n", Body]).
 
 -spec headers(binary()) -> iolist().
-headers(Body) when is_binary(Body) ->
+headers(Body) ->
   io_lib:format("Content-Length: ~p\r\n", [byte_size(Body)]).

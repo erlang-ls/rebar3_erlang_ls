@@ -1,7 +1,9 @@
 -module(rebar3_bsp_server).
 -behaviour(gen_server).
 
--export([ start_link/1 ]).
+-export([ start_link/1
+        , stop/0
+        ]).
 
 -export([ init/1
         , handle_call/3
@@ -30,14 +32,22 @@
 start_link(InitialState) ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, InitialState, []).
 
+-spec stop() -> ok.
+stop() ->
+  ok = gen_server:stop(?SERVER),
+  ok.
+
 -spec init(map()) -> {ok, state()}.
 init(InitialState) ->
   State = lists:foldl(fun(Key, StateAcc) ->
                           case maps:is_key(Key, StateAcc) of
                             true ->
+                              ?LOG_DEBUG("Passed passed externally: ~p => ~p", [Key, maps:get(Key, StateAcc)]),
                               StateAcc;
                             false ->
-                              StateAcc#{ Key => default_value(Key) }
+                              Value = default_value(Key),
+                              ?LOG_DEBUG("Init with default value: ~p => ~p", [Key, Value]),
+                              StateAcc#{ Key => Value }
                           end
                       end,
                       InitialState,
@@ -87,8 +97,8 @@ handle_continue(messages, State) ->
 handle_message(#{ messages := [M|Ms] } = State) ->
   MessageType = rebar3_bsp_protocol:message_type(M),
   case dispatch_message(MessageType, M, State#{ messages => Ms }) of
-    {response, _Reply, NewState} ->
-     %% ok = send_message(Reply, NewState),
+    {response, Reply, NewState} ->
+      ok = send_message(Reply, NewState),
       NewState;
     {noresponse, NewState} ->
       NewState
@@ -125,11 +135,21 @@ dispatch_message(notification, Message, State) ->
 try_dispatch(#{ method := Method } = Message, State) ->
   Params = maps:get(params, Message, #{}),
   MethodAtom = erlang:binary_to_atom(Method),
-  case erlang:function_exported(rebar3_bsp_methods, MethodAtom, 2) of
-    false ->
-      %% XXX hard coded stuff is evil, -32601 means MethodNotFound
-      {error, #{ code => -32601, message => <<"Unsupported method ", Params/binary>> }, State};
-    true ->
-      rebar3_bsp_methods:Method(Params, State)
+  try
+    rebar3_bsp_methods:MethodAtom(Params, State)
+  catch
+    Class:Error:Stacktrace ->
+      {Code, Msg} = case erlang:function_exported(rebar3_bsp_methods, MethodAtom, 2) of
+                      false ->
+                        {?LSP_ERROR_METHOD_NOT_FOUND, <<"Unsupported method ", Method/binary>>};
+                      true ->
+                        {?LSP_ERROR_INTERNAL_ERROR, io_lib:format("~p:~p ~p", [Class, Error, Stacktrace])}
+                    end,
+      {error, #{ code => Code, message => ensure_binary(Msg) }, State}
   end.
+
+ensure_binary(X) when is_binary(X) ->
+  X;
+ensure_binary(X) when is_list(X) ->
+  list_to_binary(X).
 

@@ -16,6 +16,62 @@
 -define(SOURCE_ITEM_KIND_DIR, 2).
 
 %%==============================================================================
+%% Error codes from LSP Specification
+%%==============================================================================
+
+%% // Defined by JSON RPC
+-define(LSP_ERROR_PARSE_ERROR,                        -32700).
+-define(LSP_ERROR_INVALID_REQUEST,                    -32600).
+-define(LSP_ERROR_METHOD_NOT_FOUND,                   -32601).
+-define(LSP_ERROR_INVALID_PARAMS,                     -32602).
+-define(LSP_ERROR_INTERNAL_ERROR,                     -32603).
+
+%% /**
+%% * This is the start range of JSON RPC reserved error codes.
+%% * It doesn't denote a real error code. No LSP error codes should
+%% * be defined between the start and end range. For backwards
+%% * compatibility the `ServerNotInitialized` and the `UnknownErrorCode`
+%% * are left in the range.
+%% *
+%% * @since 3.16.0
+%% */
+-define(LSP_ERROR_JSONRPC_RESERVED_ERROR_RANGE_START, -32099).
+
+%% /**
+%% * Error code indicating that a server received a notification or
+%% * request before the server has received the `initialize` request.
+%% */
+-define(LSP_ERROR_SERVER_NOT_INITIALIZED,             -32002).
+-define(LSP_ERROR_UNKNOWN_ERROR_CODE,                 -32001).
+
+%% /**
+%% * This is the start range of JSON RPC reserved error codes.
+%% * It doesn't denote a real error code.
+%% *
+%% * @since 3.16.0
+%% */
+-define(LSP_ERROR_JSONRPC_RESERVED_ERROR_RANGE_END,   -32000).
+
+%% /**
+%% * This is the start range of LSP reserved error codes.
+%% * It doesn't denote a real error code.
+%% 	 *
+%% * @since 3.16.0
+%% */
+-define(LSP_ERROR_LSP_RESERVED_ERROR_RANGE_START,     -32899).
+
+-define(LSP_ERROR_CONTENT_MODIFIED,                   -32801).
+-define(LSP_ERROR_REQUEST_CANCELLED,                  -32800).
+
+%% /**
+%% * This is the end range of LSP reserved error codes.
+%% * It doesn't denote a real error code.
+%% 	 *
+%% * @since 3.16.0
+%% */
+-define(LSP_ERROR_LSP_RESERVED_ERROR_RANGE_END,       -32800).
+
+%%==============================================================================
 %% Type Definitions
 %%==============================================================================
 

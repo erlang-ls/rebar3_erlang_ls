@@ -46,19 +46,30 @@ format_error(Reason) ->
 -spec start_server(rebar_state:t()) -> no_return().
 start_server(State) ->
   process_flag(trap_exit, true),
-  {ok, ServerPid} = rebar3_bsp_server:start_link(#{rebar3_state => State}),
-  wait_loop(ServerPid).
+  {ok, _AppNames} = application:ensure_all_started(rebar3_bsp, permanent),
+  {ok, Pid} = supervisor:start_child(rebar3_bsp_sup, #{ id => rebar3_bsp_server
+                                                      , start => { rebar3_bsp_server
+                                                                 , start_link
+                                                                 , [#{ rebar3_state => State }]
+                                                                 }
+                                                      , restart => temporary
+                                                      }),
+  link(Pid),
+  init ! {'EXIT', self(), normal},
+  wait_loop(Pid).
 
 -spec wait_loop(pid()) -> no_return().
 wait_loop(ServerPid) ->
   receive
     {'EXIT', ServerPid, Reason} ->
       case Reason of
-        {shutdown, {exit_code, ExitCode}} ->
+        {exit_code, ExitCode} ->
           init:stop(ExitCode);
         _ ->
           init:stop()
-      end
+      end;
+    _ ->
+      ok
   end,
   wait_loop(ServerPid).
 

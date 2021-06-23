@@ -3,13 +3,13 @@
 
 -export([ start_link/1
         , stop/0
+        , post_message/1
         ]).
 
 -export([ init/1
         , handle_call/3
         , handle_cast/2
         , handle_info/2
-        , handle_continue/2
         , format_status/2
         ]).
 
@@ -24,7 +24,6 @@
                   , is_shutdown := boolean()            %% Build server has shut down?
                   , port := port() | pid() | undefined  %% IO Port
                   , buffer := binary()                  %% Data buffer
-                  , messages := list()                  %% Pending incoming messages
                   }.
 
 -export_type([state/0]).
@@ -35,19 +34,20 @@ start_link(InitialState) ->
 
 -spec stop() -> ok.
 stop() ->
-  ok = gen_server:stop(?SERVER),
-  ok.
+  gen_server:call(?SERVER, {shutdown, normal}).
+
+-spec post_message(map()) -> ok.
+post_message(Message) ->
+  gen_server:cast(?SERVER, {incoming_message, Message}).
 
 -spec init(map()) -> {ok, state()}.
 init(InitialState) ->
   State = lists:foldl(fun(Key, StateAcc) ->
                           case maps:is_key(Key, StateAcc) of
                             true ->
-                              ?LOG_DEBUG("Passed passed externally: ~p => ~p", [Key, maps:get(Key, StateAcc)]),
                               StateAcc;
                             false ->
                               Value = default_value(Key),
-                              ?LOG_DEBUG("Init with default value: ~p => ~p", [Key, Value]),
                               StateAcc#{ Key => Value }
                           end
                       end,
@@ -57,10 +57,10 @@ init(InitialState) ->
                       , is_shutdown
                       , port
                       , buffer
-                      , messages
                       ]),
   {ok, State}.
 
+-spec default_value(atom()) -> term().
 default_value(is_initialized) ->
   false;
 default_value(is_shutdown) ->
@@ -70,77 +70,94 @@ default_value(port) ->
   {ok, [InFd, OutFd], _Garbage} = io_lib:fread("~d ~d", IoFdString),
   erlang:open_port({fd, InFd, OutFd}, [binary]);
 default_value(buffer) ->
-  <<>>;
-default_value(messages) ->
-  [].
+  <<>>.
 
-handle_call(_Request, _From, _State) ->
-  error(badarg).
+-spec handle_call({shutdown, term()}, term(), state()) -> {stop, term(), ok, state()}.
+handle_call({shutdown, Reason}, _From, State) ->
+  ReportedReason = case Reason of
+                     normal ->
+                       normal;
+                     {exit_code, 0} ->
+                       normal;
+                     _ ->
+                       {shutdown, Reason}
+                   end,
+  {stop, ReportedReason, ok, State}.
 
-handle_cast(_Request, _State) ->
-  error(badarg).
-
-handle_info({Port, {data, NewData}}, #{ port := Port, buffer := OldBuffer } = State) ->
-  {noreply, State#{ buffer => <<OldBuffer/binary, NewData/binary>> }, {continue, decode}}.
-
-handle_continue(decode, #{ buffer := Buffer, messages := OldMsgs } = State) ->
-  case rebar3_bsp_protocol:decode_packets(Buffer) of
-    {ok, NewMsgs, RestData} ->
-      {noreply, State#{ buffer => RestData, messages => OldMsgs ++ NewMsgs }, {continue, messages}};
-    {error, Reason} ->
-      {stop, State, {decode_error, Reason}}
-  end;
-handle_continue(messages, #{ messages := [] } = State) ->
-  {noreply, State};
-handle_continue(messages, State) ->
-  handle_message(State).
-%%  {noreply, handle_message(State), {continue, messages}}.
-
-format_status(_Opt, [_PDict, State]) ->
-  State#{ rebar3_state => rebar3_state_redacted }.
-
-handle_message(#{ messages := [M|Ms] } = State) ->
-  MessageType = rebar3_bsp_protocol:message_type(M),
-  case dispatch_message(MessageType, M, State#{ messages => Ms }) of
+-spec handle_cast({incoming_message, map()}, state()) -> {noreply, state()}.
+handle_cast({incoming_message, Message}, State) ->
+  MessageType = rebar3_bsp_protocol:message_type(Message),
+  case dispatch_message(MessageType, Message, State) of
     {response, Reply, NewState} ->
       ok = send_message(Reply, NewState),
-      {noreply, NewState, {continue, messages}};
+      {noreply, NewState};
     {noresponse, NewState} ->
-      {noreply, NewState, {continue, messages}};
+      {noreply, NewState};
     {exit, ExitCode, NewState} ->
-      {stop, {shutdown, {exit_code, ExitCode}}, NewState}
+      RequestId = gen_server:send_request(self(), {shutdown, {exit_code, ExitCode}}),
+      gen_server:receive_response(RequestId, 0),
+      {noreply, NewState}
   end.
 
+-spec handle_info({pid() | port(), {data, binary()}}, state()) -> {noreply, state()} | {stop, term(), state()}.
+handle_info({Port, {data, NewBuffer}}, #{ port := Port, buffer := OldBuffer } = State) ->
+  case rebar3_bsp_protocol:decode_packets(<<OldBuffer/binary, NewBuffer/binary>>) of
+    {ok, Messages, RestData} ->
+      [ ok = post_message(M) || M <- Messages ],
+      {noreply, State#{ buffer => RestData }};
+    {error, Reason} ->
+      {stop, {decode_error, Reason}, State}
+  end.
+
+-spec format_status(normal | terminate, list()) -> term().
+format_status(_Opt, [_PDict, State]) ->
+  [{data, [{"State", State#{ rebar3_state => rebar3_state_redacted }}]}].
+
+-spec send_message(map(), state()) -> ok.
 send_message(Message, #{ port := Port } = _State) ->
   ok = rebar3_bsp_protocol:send_message(Port, Message),
   ok.
 
-dispatch_message(request, #{ id := Id } = Message, State) ->
-  case try_dispatch(Message, State) of
-    {response, Result, NewState} ->
-      {response, rebar3_bsp_protocol:response(Id, Result), NewState};
-    {error, Error, NewState} ->
-      {response, rebar3_bsp_protocol:error(Id, Error), NewState};
-    {noresponse, NewState} ->
-      {response, rebar3_bsp_protocol:response(Id, null), NewState}
-  end;
+-spec dispatch_message(atom(), map(), state()) ->
+        {noresponse, state()} |
+        {response, map(), state()} |
+        {exit, integer(), state()}.
 dispatch_message(response, Message, State) ->
   ?LOG_WARNING("Ignoring response ~p", [Message]),
   {noresponse, State};
-dispatch_message(notification, Message, State) ->
-  case try_dispatch(Message, State) of
-    {response, Result, NewState} ->
+dispatch_message(MessageType, Message, State) ->
+  case {MessageType, try_dispatch(Message, State)} of
+    %% Requests must always be responded to
+    {request, {response, Result, NewState}} ->
+      {response, make_response(Message, Result), NewState};
+    {request, {noresponse, NewState}} ->
+      {response, make_response(Message, null), NewState};
+    %% Notifications don't expect responses
+    {notification, {response, Result, NewState}} ->
       ?LOG_WARNING("Unexpected response to notification [notification=~p] [response=~p]",
                    [Message, Result]),
       {noresponse, NewState};
-    {error, Error, NewState} ->
-      {response, rebar3_bsp_protocol:error(null, Error), NewState};
-    {noresponse, NewState} ->
+    {notification, {noresponse, NewState}} ->
       {noresponse, NewState};
-    {exit, ExitCode, NewState} ->
+    %% Always report errors
+    {_AnyType, {error, Error, NewState}} ->
+      {response, make_error(Message, Error), NewState};
+    %% Always forward exit requests
+    {_AnyType, {exit, ExitCode, NewState}} ->
       {exit, ExitCode, NewState}
   end.
 
+-spec make_response(map(), map()) -> map().
+make_response(Message, Result) ->
+  Id = rebar3_bsp_protocol:message_id(Message),
+  rebar3_bsp_protocol:response(Id, Result).
+
+-spec make_error(map(), map()) -> map().
+make_error(Message, Error) ->
+  Id = rebar3_bsp_protocol:message_id(Message),
+  rebar3_bsp_protocol:error(Id, Error).
+
+-spec try_dispatch(map(), state()) -> term().
 try_dispatch(#{ method := Method } = Message, State) ->
   Params = maps:get(params, Message, #{}),
   MethodAtom = erlang:binary_to_atom(Method),
@@ -157,6 +174,7 @@ try_dispatch(#{ method := Method } = Message, State) ->
       {error, #{ code => Code, message => ensure_binary(Msg) }, State}
   end.
 
+-spec ensure_binary(string() | binary()) -> binary().
 ensure_binary(X) when is_binary(X) ->
   X;
 ensure_binary(X) when is_list(X) ->

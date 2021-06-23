@@ -45,8 +45,8 @@ init_per_testcase(TestCase, Config) ->
 
 -spec end_per_testcase(atom(), config()) -> ok.
 end_per_testcase(TestCase, Config) ->
-  ok = rebar3_bsp_test:end_sample_app_testcase(TestCase, Config),
   ok = rebar3_bsp_client:stop(),
+  ok = rebar3_bsp_test:end_sample_app_testcase(TestCase, Config),
   ok.
 
 -spec all() -> [atom()].
@@ -60,7 +60,7 @@ all() ->
 %%==============================================================================
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
-  {ok, Result} = rebar3_bsp_test:client_request('build/initialize', #{}, 30 * 1000),
+  {ok, Result} = rebar3_bsp_util:client_request('build/initialize', #{}, 30 * 1000),
   Expected = #{ bspVersion => <<"2.0.0">>
               , capabilities => #{}
               , displayName => <<"rebar3_bsp">>

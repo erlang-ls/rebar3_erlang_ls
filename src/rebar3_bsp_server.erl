@@ -93,7 +93,8 @@ handle_continue(decode, #{ buffer := Buffer, messages := OldMsgs } = State) ->
 handle_continue(messages, #{ messages := [] } = State) ->
   {noreply, State};
 handle_continue(messages, State) ->
-  {noreply, handle_message(State), {continue, messages}}.
+  handle_message(State).
+%%  {noreply, handle_message(State), {continue, messages}}.
 
 format_status(_Opt, [_PDict, State]) ->
   State#{ rebar3_state => rebar3_state_redacted }.
@@ -103,9 +104,11 @@ handle_message(#{ messages := [M|Ms] } = State) ->
   case dispatch_message(MessageType, M, State#{ messages => Ms }) of
     {response, Reply, NewState} ->
       ok = send_message(Reply, NewState),
-      NewState;
+      {noreply, NewState, {continue, messages}};
     {noresponse, NewState} ->
-      NewState
+      {noreply, NewState, {continue, messages}};
+    {exit, ExitCode, NewState} ->
+      {stop, {shutdown, {exit_code, ExitCode}}, NewState}
   end.
 
 send_message(Message, #{ port := Port } = _State) ->
@@ -134,8 +137,8 @@ dispatch_message(notification, Message, State) ->
       {response, rebar3_bsp_protocol:error(null, Error), NewState};
     {noresponse, NewState} ->
       {noresponse, NewState};
-    {stop, ExitCode, NewState} ->
-      {stop, ExitCode, NewState}
+    {exit, ExitCode, NewState} ->
+      {exit, ExitCode, NewState}
   end.
 
 try_dispatch(#{ method := Method } = Message, State) ->

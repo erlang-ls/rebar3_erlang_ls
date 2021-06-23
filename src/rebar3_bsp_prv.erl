@@ -45,10 +45,22 @@ format_error(Reason) ->
 
 -spec start_server(rebar_state:t()) -> no_return().
 start_server(State) ->
-  simulate_proc_lib(),
-  true = register(?AGENT, self()),
-  {ok, GenState} = rebar3_bsp_server:init(#{rebar3_state => State}),
-  gen_server:enter_loop(rebar3_bsp_server, [], GenState, {local, ?AGENT}, hibernate).
+  process_flag(trap_exit, true),
+  {ok, ServerPid} = rebar3_bsp_server:start_link(#{rebar3_state => State}),
+  wait_loop(ServerPid).
+
+-spec wait_loop(pid()) -> no_return().
+wait_loop(ServerPid) ->
+  receive
+    {'EXIT', ServerPid, Reason} ->
+      case Reason of
+        {shutdown, {exit_code, ExitCode}} ->
+          init:stop(ExitCode);
+        _ ->
+          init:stop()
+      end
+  end,
+  wait_loop(ServerPid).
 
 -spec setup_name(rebar_state:t()) -> ok.
 setup_name(State) ->
@@ -64,9 +76,3 @@ setup_name(State) ->
   rebar_dist_utils:short(list_to_atom(Id), Opts),
   ok.
 
--spec simulate_proc_lib() -> ok.
-simulate_proc_lib() ->
-  FakeParent = spawn_link(fun() -> timer:sleep(infinity) end),
-  put('$ancestors', [FakeParent]),
-  put('$initial_call', {rebar3_bsp_server, init, 1}),
-  ok.

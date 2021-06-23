@@ -18,12 +18,14 @@
 -include("rebar3_bsp.hrl").
 
 -define(REQUEST_SPEC(Method, ParamType, ResultType),
-        Method(ParamType, rebar3_bsp_server:state()) ->
-           {response, ResultType, rebar3_bsp_server:state()}).
+        Method(ParamType, state()) ->
+           {response, ResultType, state()}).
 
 -define(NOTIFICATION_SPEC(Method, ParamType),
-        Method(ParamType, rebar3_bsp_server:state()) ->
-           {noresponse, rebar3_bsp_server:state()} | {stop, integer(), rebar3_bsp_server:state()}).
+        Method(ParamType, state()) ->
+           {noresponse, state()} | {exit, integer(), state()}).
+
+-type state() :: rebar3_bsp_server:state().
 
 -spec ?REQUEST_SPEC('build/initialize', initializeBuildParams(), initializeBuildResult()).
 'build/initialize'(_Params, ServerState) ->
@@ -45,13 +47,12 @@
 
 -spec ?NOTIFICATION_SPEC('build/exit', null).
 'build/exit'(null, #{is_shutdown := IsShutdown} = ServerState) ->
-  ExitCode = case IsShutdown of
-               true ->
-                 0;
-               false ->
-                 1
-             end,
-  {stop, ExitCode, ServerState}.
+  case IsShutdown of
+    true ->
+      {exit, 0, ServerState};
+    false ->
+      {exit, 1, ServerState}
+  end.
 
 -spec ?REQUEST_SPEC('workspace/buildTargets', workspaceBuildTargetsParams(), workspaceBuildTargetsResult()).
 'workspace/buildTargets'(_Params, #{rebar3_state := R3State} = ServerState) ->

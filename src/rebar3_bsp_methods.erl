@@ -86,7 +86,7 @@
 
 -spec ?REQUEST_SPEC('buildTarget/compile', compileParams(), compileResult()).
 'buildTarget/compile'(#{targets := Targets}, #{rebar3_state := _R3State} = ServerState) ->
-  {response, #{ statusCode => 0, dataKind => <<"null">> }, ServerState}.
+  {response, #{ statusCode => 0 }, ServerState}.
 
 %% Internal Functions
 

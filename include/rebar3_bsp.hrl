@@ -167,7 +167,10 @@
                           }.
 -type compileResult() :: #{ originId => binary()
                           , statusCode := integer()
-                          , dataKind := binary()
+                            %% The spec indicates that dataKind is required, but a comment says
+                            %% "If this field is not set, the kind of data is not specified",
+                            %% so it seems it is actually optional
+                          , dataKind => binary()
                           , data => any()
                           }.
 

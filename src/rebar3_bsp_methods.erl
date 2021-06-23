@@ -86,11 +86,11 @@
 
 -spec ?REQUEST_SPEC('buildTarget/compile', compileParams(), compileResult()).
 'buildTarget/compile'(#{targets := Targets}, #{rebar3_state := _R3State} = ServerState) ->
-  {response, #{ statusCode => 0 }, ServerState}.
+  {response, #{ statusCode => 0, dataKind => <<"null">> }, ServerState}.
 
 %% Internal Functions
 
--spec items([atom()], [buildTargetIdentifier()], rebar3_state:t()) -> [sourcesItem()].
+-spec items(atom(), [buildTargetIdentifier()], rebar3_state:t()) -> [sourcesItem()].
 items(Items, Targets, R3State) ->
   Applications = rebar_state:Items(R3State),
   TargetProfiles = [erlang:binary_to_atom(Uri) || #{ uri := Uri } <- Targets],

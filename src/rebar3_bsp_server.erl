@@ -147,7 +147,7 @@ dispatch_message(MessageType, Message, State) ->
       {exit, ExitCode, NewState}
   end.
 
--spec make_response(map(), map()) -> map().
+-spec make_response(map(), map() | null) -> map().
 make_response(Message, Result) ->
   Id = rebar3_bsp_protocol:message_id(Message),
   rebar3_bsp_protocol:response(Id, Result).

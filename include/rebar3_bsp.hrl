@@ -83,7 +83,7 @@
 -type object() :: map().
 
 -type message() :: #{ jsonrpc := binary() }.
--type params() :: array() | object().
+-type params() :: array() | object() | null.
 
 -type requestId() :: integer() | binary().
 -type requestMessage() :: #{ jsonrpc := binary()

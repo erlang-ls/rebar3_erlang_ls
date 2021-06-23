@@ -29,7 +29,7 @@
 
 -spec ?REQUEST_SPEC('build/initialize', initializeBuildParams(), initializeBuildResult()).
 'build/initialize'(_Params, ServerState) ->
-  Result = #{ displayName => <<"rebar3_bsp">>
+  Result = #{ displayName => rebar3_bsp
             , version => rebar3_bsp_connection:version(?BSP_APPLICATION)
             , bspVersion => ?BSP_VSN
             , capabilities => #{}
@@ -63,7 +63,7 @@
                                       , canRun => false
                                       , canDebug => false
                                       }
-                   , languageIds => [<<"erlang">>]
+                   , languageIds => [erlang]
                    , dependencies => []
                    }
                   || Profile <- rebar_state:current_profiles(R3State)],

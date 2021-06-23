@@ -85,7 +85,7 @@ build_initialized(_Config) ->
 workspace_buildtargets(_Config) ->
   rebar3_bsp_util:initialize_server(),
   {ok, Result} = rebar3_bsp_util:client_request('workspace/buildTargets', #{}),
-  ?assertMatch(#{ targets := [#{ id := #{ uri := <<"default">> } }] }, Result),
+  ?assertMatch(#{ targets := [#{ id := #{ uri := <<"profile:default">> } }] }, Result),
   ok.
 
 -spec buildtarget_compile(config()) -> ok.
@@ -98,7 +98,7 @@ buildtarget_compile(_Config) ->
 -spec buildtarget_sources(config()) -> ok.
 buildtarget_sources(_Config) ->
   rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/sources', targets([<<"default">>])),
+  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/sources', targets([<<"profile:default">>])),
   #{ items := [Item] } = Result,
   #{ roots := [Root] } = Item,
   ?assertEqual(list_to_binary(rebar3_bsp_test:sample_app_dir()), Root),
@@ -107,7 +107,7 @@ buildtarget_sources(_Config) ->
 -spec buildtarget_dependencysources(config()) -> ok.
 buildtarget_dependencysources(_Config) ->
   rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/dependencySources', targets([<<"default">>])),
+  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/dependencySources', targets([<<"profile:default">>])),
   ExpectedMeckDir = filename:join([rebar3_bsp_test:sample_app_dir(), "_build", "default", "lib", "meck"]),
   #{ items := [#{ sources := [#{ generated := false
                                , kind := ?SOURCE_ITEM_KIND_DIR

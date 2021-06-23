@@ -9,6 +9,7 @@
 
 %% Message API
 -export([ message_type/1
+        , message_id/1
         , send_message/2
         ]).
 
@@ -47,6 +48,15 @@ message_type(Message) ->
     %% Notification - doesn't have an id, always has a method
     #{ method := _Method } ->
       notification
+  end.
+
+-spec message_id(map()) -> requestId().
+message_id(Message) ->
+  case Message of
+    #{ id := Id } ->
+      Id;
+    _ ->
+      null
   end.
 
 -spec send_message(port() | pid(), map()) -> ok.

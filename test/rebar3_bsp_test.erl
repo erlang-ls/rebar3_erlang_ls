@@ -5,8 +5,6 @@
         , end_sample_app_testcase/2
         ]).
 
-
-
 -spec sample_app_dir() -> file:name().
 sample_app_dir() ->
   PrivDir = rebar_file_utils:resolve_link(code:priv_dir(rebar3_bsp)),

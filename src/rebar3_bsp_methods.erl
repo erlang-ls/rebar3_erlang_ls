@@ -95,7 +95,7 @@
 
 %% Internal Functions
 
--spec target_sourceItems(buildTargetIdentifier(), rebar3_state:t()) -> [sourcesItem()].
+-spec target_sourceItems(buildTargetIdentifier(), rebar3_state:t()) -> [sourceItem()].
 target_sourceItems(#{ uri := TargetUri }, R3State) ->
   case rebar3_bsp_uri:parse(TargetUri) of
     #{ scheme := <<"profile">>, path := Profile } ->

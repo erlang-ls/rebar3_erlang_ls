@@ -8,6 +8,7 @@
         , extract/3
         , normalize/1
         , normalize/2
+        , parse/1
         ]).
 
 -type uri_string() :: uri_string:uri_string().
@@ -68,4 +69,8 @@ normalize(Uri, Opts) ->
     [return_map] ->
       uri_string:parse(BinaryUri)
   end.
+
+-spec parse(uri_string()) -> uri_map().
+parse(Uri) ->
+  uri_string:normalize(Uri, [return_map]).
 

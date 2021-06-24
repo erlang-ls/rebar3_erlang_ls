@@ -76,49 +76,55 @@
 
 -spec ?REQUEST_SPEC('buildTarget/sources', buildTargetSourcesParams(), buildTargetSourcesResult()).
 'buildTarget/sources'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->
-  Items = items(project_apps, Targets, R3State),
+  Items = [ #{ target => Target
+             , sources => target_sourceItems(Target, R3State) 
+             } || Target <- Targets ],
   {response, #{items => Items}, ServerState}.
 
 -spec ?REQUEST_SPEC('buildTarget/dependencySources', dependencySourcesParams(), dependencySourcesResult()).
 'buildTarget/dependencySources'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->
-  Items = items(all_deps, Targets, R3State),
+  Items = [ #{ target => Target
+             , sources => target_dependencySources(Target, R3State) 
+             } || Target <- Targets],
   {response, #{items => Items}, ServerState}.
 
 -spec ?REQUEST_SPEC('buildTarget/compile', compileParams(), compileResult()).
 'buildTarget/compile'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->
-  Profiles = target_profiles(Targets),
-  NewR3State = lists:foldl(fun(Profile, AccState) ->
-                               {ok, _State} = rebar3:run(AccState, ["as", binary_to_list(Profile), "compile"]),
-                               AccState
-                           end,
-                           R3State,
-                           Profiles),
-  {response, #{ statusCode => 0 }, ServerState#{rebar3_state => NewR3State}}.
+  [ {ok, _NewR3State} = target_compile(Target, R3State) || Target <- Targets ],
+  {response, #{ statusCode => 0 }, ServerState}.
 
 %% Internal Functions
 
--spec items(atom(), [buildTargetIdentifier()], rebar3_state:t()) -> [sourcesItem()].
-items(Items, Targets, R3State) ->
-  Applications = rebar_state:Items(R3State),
-  TargetProfiles = [binary_to_atom(P) || P <- target_profiles(Targets)],
-  TargetsAndApps = [{Target, A} || A <- Applications,
-                                   {Target, Profile} <- lists:zip(Targets, TargetProfiles),
-                                   lists:member(Profile, rebar_app_info:profiles(A))],
-  TargetMap = lists:foldl(
-                fun({Target, App}, Acc) ->
-                    {Sources, Roots} = maps:get(Acc, Target, {[], []}),
-                    AppDir = rebar3_bsp_uri:dir(rebar_app_info:dir(App)),
-                    Source = #{ uri => AppDir
-                              , kind => ?SOURCE_ITEM_KIND_DIR
-                              , generated => false
-                              },
-                    Root = rebar3_bsp_uri:dir(rebar_state:dir(R3State)),
-                    Acc#{ Target => {[Source|Sources], [Root|Roots]} }
-                end, #{}, TargetsAndApps),
-  [ #{ target => Target, sources => Sources, roots => Roots}
-    || {Target, {Sources, Roots}} <- maps:to_list(TargetMap)].
+-spec target_sourceItems(buildTargetIdentifier(), rebar3_state:t()) -> [sourcesItem()].
+target_sourceItems(#{ uri := TargetUri }, R3State) ->
+  case rebar3_bsp_uri:parse(TargetUri) of
+    #{ scheme := <<"profile">>, path := Profile } ->
+      ProjectApps = rebar_state:project_apps(R3State),
+      ProfileApps = apps_with_profile(binary_to_atom(Profile), ProjectApps),
+      [ #{ uri => rebar3_bsp_uri:dir(rebar_app_info:dir(App))
+         , kind => ?SOURCE_ITEM_KIND_DIR
+         , generated => false
+         } || App <- ProfileApps ]
+  end.
 
--spec target_profiles([map()]) -> [binary()].
-target_profiles(Targets) ->
-  [rebar3_bsp_uri:extract(path, Uri, #{scheme => <<"profile">>}) || #{ uri := Uri } <- Targets].
+-spec target_dependencySources(buildTargetIdentifier(), rebar3_state:t()) -> [uri()].
+target_dependencySources(#{ uri := TargetUri }, R3State) ->
+  case rebar3_bsp_uri:parse(TargetUri) of
+    #{ scheme := <<"profile">>, path := Profile } ->
+      AllDeps = rebar_state:all_deps(R3State),
+      ProfileDeps = apps_with_profile(binary_to_atom(Profile), AllDeps),
+      [ rebar3_bsp_uri:dir(rebar_app_info:dir(App)) || App <- ProfileDeps ]
+  end.
+
+-spec target_compile(buildTargetIdentifier(), rebar3_state:t()) -> {ok, rebar3_state:t()}.
+target_compile(#{ uri := TargetUri }, R3State) ->
+  case rebar3_bsp_uri:parse(TargetUri) of
+    #{ scheme := <<"profile">>, path := Profile } ->
+      {ok, NewState} = rebar3:run(R3State, ["as", binary_to_list(Profile), "compile"]),
+      {ok, NewState}
+  end.
+
+-spec apps_with_profile(atom(), [rebar_app_info:t()]) -> [rebar_app_info:t()].
+apps_with_profile(Profile, Apps) ->
+  [ App || App <- Apps, lists:member(Profile, rebar_app_info:profiles(App)) ].
 

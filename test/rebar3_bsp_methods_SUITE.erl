@@ -112,17 +112,14 @@ buildtarget_sources(_Config) ->
   ?assertEqual(?SOURCE_ITEM_KIND_DIR, maps:get(kind, Source)),
   ?assertEqual(false, maps:get(generated, Source)),
   ?assertEqual(rebar3_bsp_uri:dir(?SAMPLE_APP_DIR), maps:get(uri, Source)),
-  #{ roots := [Root] } = Item,
-  ?assertEqual(rebar3_bsp_uri:dir(?SAMPLE_APP_DIR), Root),
   ok.
 
 -spec buildtarget_dependencysources(config()) -> ok.
 buildtarget_dependencysources(_Config) ->
   rebar3_bsp_util:initialize_server(),
   {ok, Result} = rebar3_bsp_util:client_request('buildTarget/dependencySources', targets([<<"profile:default">>])),
-  #{ items := [#{ sources := [#{ generated := false
-                               , kind := ?SOURCE_ITEM_KIND_DIR
-                               , uri := ResultMeckDir }] }] } = Result,
+  #{ items := [#{ target := #{ uri := <<"profile:default">> }, sources := Sources }] } = Result,
+  [ResultMeckDir] = Sources,
   ?assertEqual(rebar3_bsp_uri:dir(sample_app_build_dir("default/lib/meck")), ResultMeckDir),
   ok.
 

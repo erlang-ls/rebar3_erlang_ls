@@ -8,6 +8,7 @@
         , tear_down_local_client_server/1
         , maybe_stop/2
         , new_rebar_state_from_file/1
+        , ensure_binary/1
         ]).
 
 -include_lib("kernel/include/logger.hrl").
@@ -63,3 +64,12 @@ maybe_stop(Pid, Name) ->
 new_rebar_state_from_file(Filename) ->
   {ok, RebarConfig} = file:consult(Filename),
   rebar_state:new(RebarConfig).
+
+-spec ensure_binary(binary() | string() | atom()) -> binary().
+ensure_binary(A) when is_atom(A) ->
+  atom_to_binary(A);
+ensure_binary(L) when is_list(L) ->
+  list_to_binary(L);
+ensure_binary(B) when is_binary(B) ->
+  B.
+

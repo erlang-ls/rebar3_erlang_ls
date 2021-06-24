@@ -87,7 +87,7 @@ stop() ->
 
 -spec send_request(method(), params()) -> any().
 send_request(Method, Params) ->
-  gen_server:send_request(?SERVER, {send_request, ensure_binary(Method), Params}).
+  gen_server:send_request(?SERVER, {send_request, rebar3_bsp_util:ensure_binary(Method), Params}).
 
 -spec receive_response(any(), timeout()) -> {ok, responseResult()} | {error, responseError()} | timeout.
 receive_response(RequestId, Timeout) ->
@@ -118,7 +118,7 @@ wait_response(RequestId, Timeout) ->
 
 -spec send_notification(method(), params()) -> ok.
 send_notification(Method, Params) ->
-  gen_server:cast(?SERVER, {send_notification, ensure_binary(Method), Params}).
+  gen_server:cast(?SERVER, {send_notification, rebar3_bsp_util:ensure_binary(Method), Params}).
 
 -spec get_requests() -> [requestMessage()].
 get_requests() ->
@@ -232,12 +232,6 @@ default_params(<<"build/initialize">>) ->
    };
 default_params(Method) when is_binary(Method) ->
   #{}.
-
--spec ensure_binary(atom() | binary()) -> binary().
-ensure_binary(Atom) when is_atom(Atom) ->
-  atom_to_binary(Atom);
-ensure_binary(Binary) when is_binary(Binary) ->
-  Binary.
 
 -spec unpeel_response(map()) -> {ok, map()} | {error, map()}.
 unpeel_response(#{ error := Error }) ->

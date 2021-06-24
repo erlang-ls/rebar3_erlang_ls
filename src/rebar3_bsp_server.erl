@@ -171,11 +171,6 @@ try_dispatch(#{ method := Method } = Message, State) ->
                       true ->
                         {?LSP_ERROR_INTERNAL_ERROR, io_lib:format("~p:~p ~p", [Class, Error, Stacktrace])}
                     end,
-      {error, #{ code => Code, message => ensure_binary(Msg) }, State}
+      {error, #{ code => Code, message => rebar3_bsp_util:ensure_binary(Msg) }, State}
   end.
 
--spec ensure_binary(string() | binary()) -> binary().
-ensure_binary(X) when is_binary(X) ->
-  X;
-ensure_binary(X) when is_list(X) ->
-  list_to_binary(X).

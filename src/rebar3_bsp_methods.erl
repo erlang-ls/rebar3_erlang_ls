@@ -29,7 +29,7 @@
 
 -spec ?REQUEST_SPEC('build/initialize', initializeBuildParams(), initializeBuildResult()).
 'build/initialize'(_Params, ServerState) ->
-  Result = #{ displayName => rebar3_bsp
+  Result = #{ displayName => <<"rebar3_bsp">>
             , version => rebar3_bsp_connection:version(?BSP_APPLICATION)
             , bspVersion => ?BSP_VSN
             , capabilities => #{}
@@ -56,8 +56,8 @@
 
 -spec ?REQUEST_SPEC('workspace/buildTargets', workspaceBuildTargetsParams(), workspaceBuildTargetsResult()).
 'workspace/buildTargets'(_Params, #{rebar3_state := R3State} = ServerState) ->
-  BuildTargets = [#{ id => #{ uri => uri(profile, Profile) }
-                   , tags => []
+  BuildTargets = [#{ id => #{ uri => rebar3_bsp_uri:profile(Profile) }
+                   , tags => [rebar3_profile]
                    , capabilities => #{ canCompile => true
                                       , canTest => false
                                       , canRun => false
@@ -94,42 +94,25 @@
 -spec items(atom(), [buildTargetIdentifier()], rebar3_state:t()) -> [sourcesItem()].
 items(Items, Targets, R3State) ->
   Applications = rebar_state:Items(R3State),
-  TargetProfiles = [binary_to_atom(uri_extract(path, Uri, #{scheme => <<"profile">>}))
-                    || #{ uri := Uri } <- Targets],
+  TargetProfiles = [binary_to_atom(P) || P <- target_profiles(Targets)],
   TargetsAndApps = [{Target, A} || A <- Applications,
                                    {Target, Profile} <- lists:zip(Targets, TargetProfiles),
                                    lists:member(Profile, rebar_app_info:profiles(A))],
   TargetMap = lists:foldl(
                 fun({Target, App}, Acc) ->
                     {Sources, Roots} = maps:get(Acc, Target, {[], []}),
-                    AppDir = ensure_binary(rebar_app_info:dir(App)),
+                    AppDir = rebar3_bsp_uri:dir(rebar_app_info:dir(App)),
                     Source = #{ uri => AppDir
                               , kind => ?SOURCE_ITEM_KIND_DIR
                               , generated => false
                               },
-                    Root = ensure_binary(rebar_state:dir(R3State)),
+                    Root = rebar3_bsp_uri:dir(rebar_state:dir(R3State)),
                     Acc#{ Target => {[Source|Sources], [Root|Roots]} }
                 end, #{}, TargetsAndApps),
   [ #{ target => Target, sources => Sources, roots => Roots}
     || {Target, {Sources, Roots}} <- maps:to_list(TargetMap)].
 
--spec uri(atom() | binary(), atom() | binary()) -> binary().
-uri(Scheme, Path) ->
-  SchemeBin = ensure_binary(Scheme),
-  PathBin = ensure_binary(Path),
-  uri_string:recompose(#{scheme => SchemeBin, path => PathBin}).
-
--spec ensure_binary(atom() | binary() | string()) -> binary().
-ensure_binary(A) when is_atom(A) ->
-  atom_to_binary(A);
-ensure_binary(S) when is_list(S) ->
-  list_to_binary(S);
-ensure_binary(B) when is_binary(B) ->
-  B.
-
--spec uri_extract(atom(), uri_string:uri_string(), uri_string:uri_map()) -> binary().
-uri_extract(Key, Uri, Checks) ->
-  Parsed = uri_string:parse(Uri),
-  Checks = maps:with(maps:keys(Checks), Parsed),
-  maps:get(Key, Parsed).
+-spec target_profiles([map()]) -> [binary()].
+target_profiles(Targets) ->
+  [rebar3_bsp_uri:extract(path, Uri, #{scheme => <<"profile">>}) || #{ uri := Uri } <- Targets].
 

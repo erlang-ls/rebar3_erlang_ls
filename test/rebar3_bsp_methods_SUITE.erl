@@ -25,6 +25,11 @@
 -include("rebar3_bsp.hrl").
 
 %%==============================================================================
+%% Definitions
+%%==============================================================================
+-define(SAMPLE_APP_DIR, rebar3_bsp_test:sample_app_dir()).
+
+%%==============================================================================
 %% Types
 %%==============================================================================
 -type config() :: [{atom(), any()}].
@@ -91,8 +96,11 @@ workspace_buildtargets(_Config) ->
 -spec buildtarget_compile(config()) -> ok.
 buildtarget_compile(_Config) ->
   rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/compile', #{ targets => []}),
+  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/compile'
+                                               , targets([<<"profile:default">>, <<"profile:test">>])),
   ?assertEqual(#{ statusCode => 0 }, Result),
+  ?assert(filelib:is_dir(sample_app_build_dir("test/lib/meck"))),
+  ?assert(filelib:is_dir(sample_app_build_dir("default/lib/sample"))),
   ok.
 
 -spec buildtarget_sources(config()) -> ok.
@@ -100,19 +108,22 @@ buildtarget_sources(_Config) ->
   rebar3_bsp_util:initialize_server(),
   {ok, Result} = rebar3_bsp_util:client_request('buildTarget/sources', targets([<<"profile:default">>])),
   #{ items := [Item] } = Result,
+  #{ sources := [Source] } = Item,
+  ?assertEqual(?SOURCE_ITEM_KIND_DIR, maps:get(kind, Source)),
+  ?assertEqual(false, maps:get(generated, Source)),
+  ?assertEqual(rebar3_bsp_uri:dir(?SAMPLE_APP_DIR), maps:get(uri, Source)),
   #{ roots := [Root] } = Item,
-  ?assertEqual(list_to_binary(rebar3_bsp_test:sample_app_dir()), Root),
+  ?assertEqual(rebar3_bsp_uri:dir(?SAMPLE_APP_DIR), Root),
   ok.
 
 -spec buildtarget_dependencysources(config()) -> ok.
 buildtarget_dependencysources(_Config) ->
   rebar3_bsp_util:initialize_server(),
   {ok, Result} = rebar3_bsp_util:client_request('buildTarget/dependencySources', targets([<<"profile:default">>])),
-  ExpectedMeckDir = filename:join([rebar3_bsp_test:sample_app_dir(), "_build", "default", "lib", "meck"]),
   #{ items := [#{ sources := [#{ generated := false
                                , kind := ?SOURCE_ITEM_KIND_DIR
                                , uri := ResultMeckDir }] }] } = Result,
-  ?assertEqual(list_to_binary(ExpectedMeckDir), ResultMeckDir),
+  ?assertEqual(rebar3_bsp_uri:dir(sample_app_build_dir("default/lib/meck")), ResultMeckDir),
   ok.
 
 %%==============================================================================
@@ -122,4 +133,7 @@ buildtarget_dependencysources(_Config) ->
 targets(Targets) ->
   #{ targets => [#{ uri => T } || T <- Targets] }.
 
+-spec sample_app_build_dir(string()) -> string().
+sample_app_build_dir(Dir) ->
+  filename:join([?SAMPLE_APP_DIR, "_build", Dir]).
 

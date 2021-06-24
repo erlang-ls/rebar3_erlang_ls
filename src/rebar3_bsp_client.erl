@@ -179,13 +179,9 @@ handle_cast({incoming_message, Message}, State) ->
                  ({port() | pid(), {exit_status, integer()}}, state()) -> {stop, {shutdown, any()}, state()};
                  ({'EXIT', port() | pid(), normal}, state())           -> {stop, normal, state()}.
 handle_info({Port, {data, NewData}}, #state{port = Port, buffer = OldBuffer} = State) ->
-  case rebar3_bsp_protocol:decode_packets(<<OldBuffer/binary, NewData/binary>>) of
-    {ok, Messages, RestData} ->
-      [ ok = post_message(M) || M <- Messages ],
-      { noreply, State#state{ buffer = RestData }};
-    {error, Reason} ->
-      {stop, {decode_error, Reason}, State}
-  end;
+  {Messages, RestData} = rebar3_bsp_protocol:carefully_decode_packets(<<OldBuffer/binary, NewData/binary>>),
+  [ ok = post_message(M) || M <- Messages ],
+  { noreply, State#state{ buffer = RestData }};
 handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) ->
   {stop, {shutdown, {exit_status, Status}}, State#state{port = undefined}};
 handle_info({'EXIT', Port, normal}, #state{port = Port} = State) ->

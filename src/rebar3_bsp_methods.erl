@@ -38,7 +38,7 @@
 
 -spec ?NOTIFICATION_SPEC('build/initialized', initializedBuildParams()).
 'build/initialized'(#{}, #{rebar3_state := R3State} = ServerState) ->
-  {ok, NewR3State} = rebar3:run(R3State, ["compile"]),
+  {ok, NewR3State} = rebar3:run(R3State, ["lock"]),
   {noresponse, ServerState#{is_initialized => true, rebar3_state => NewR3State}}.
 
 -spec ?REQUEST_SPEC('build/shutdown', null, null).

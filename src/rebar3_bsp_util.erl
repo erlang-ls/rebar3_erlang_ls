@@ -13,7 +13,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--define(TIMEOUT, 500).
+-define(TIMEOUT, 5000).
 
 -spec client_request(binary() | atom(), map()) -> any().
 client_request(Method, Params) ->

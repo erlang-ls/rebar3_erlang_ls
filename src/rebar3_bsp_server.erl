@@ -88,8 +88,8 @@ handle_call({shutdown, Reason}, _From, State) ->
 handle_cast({incoming_message, Message}, State) ->
   MessageType = rebar3_bsp_protocol:message_type(Message),
   case dispatch_message(MessageType, Message, State) of
-    {response, Reply, NewState} ->
-      ok = send_message(Reply, NewState),
+    {response, Reply, #{ port := Port } = NewState} ->
+      ok = rebar3_bsp_protocol:send_message(Port, Reply),
       {noreply, NewState};
     {noresponse, NewState} ->
       {noreply, NewState};
@@ -112,11 +112,6 @@ handle_info({Port, {data, NewBuffer}}, #{ port := Port, buffer := OldBuffer } = 
 -spec format_status(normal | terminate, list()) -> term().
 format_status(_Opt, [_PDict, State]) ->
   [{data, [{"State", State#{ rebar3_state => rebar3_state_redacted }}]}].
-
--spec send_message(map(), state()) -> ok.
-send_message(Message, #{ port := Port } = _State) ->
-  ok = rebar3_bsp_protocol:send_message(Port, Message),
-  ok.
 
 -spec dispatch_message(atom(), map(), state()) ->
         {noresponse, state()} |

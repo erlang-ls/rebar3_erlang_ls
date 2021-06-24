@@ -14,6 +14,7 @@
 %% Erlang API
 -export([ start_link/1
         , stop/0
+        , post_message/1
         , send_request/2
         , receive_response/2
         , check_response/2
@@ -27,7 +28,6 @@
         , handle_call/3
         , handle_cast/2
         , handle_info/2
-        , handle_continue/2
         ]).
 %%==============================================================================
 %% Includes
@@ -38,6 +38,10 @@
 %% Defines
 %%==============================================================================
 -define(SERVER, ?MODULE).
+-define(TIMEOUT, 60 * 1000).
+
+-define(CALL_SPEC(Request, Result), (Request, from(), state()) -> Result).
+-define(CAST_SPEC(Request, Result), (Request, state()) -> Result).
 
 %%==============================================================================
 %% Record Definitions
@@ -46,7 +50,6 @@
                , pending       = []   :: [{request_id(), from()}]
                , notifications = []   :: [notificationMessage()]
                , requests      = []   :: [requestMessage()]
-               , messages      = []   :: [requestMessage() | responseMessage() | notificationMessage()]
                , buffer        = <<>> :: binary()
                , port                 :: port() | pid() | undefined
                }).
@@ -81,9 +84,13 @@ start_link({port, Port}) ->
 -spec stop() -> ok.
 stop() ->
   RequestId = send_request('build/shutdown', null),
-  {ok, _Response} = receive_response(RequestId, infinity),
   ok = send_notification('build/exit', null),
-  ok.
+  receive_response(RequestId, ?TIMEOUT),
+  gen_server:stop(?SERVER).
+
+-spec post_message(map()) -> ok.
+post_message(Message) ->
+  gen_server:cast(?SERVER, {incoming_message, Message}).
 
 -spec send_request(method(), params()) -> any().
 send_request(Method, Params) ->
@@ -142,7 +149,6 @@ init(PortSpec) ->
          end,
   {ok, #state{port = Port}}.
 
--define(CALL_SPEC(Request, Result), (Request, from(), state()) -> Result).
 -spec handle_call?CALL_SPEC({send_request, binary(), params()}, {noreply, state()});
                  ?CALL_SPEC(get_requests,                       {reply, [requestMessage()], state()});
                  ?CALL_SPEC(get_notifications,                  {reply, [notificationMessage()], state()}).
@@ -159,35 +165,31 @@ handle_call(get_requests, _From, #state{ requests = Requests } = State) ->
 handle_call(get_notifications, _From, #state{ notifications = Notifications } = State) ->
   {reply, lists:reverse(Notifications), State#state{ notifications = [] }}.
 
--spec handle_cast({send_notification, binary(), params()}, state()) -> {noreply, state()}.
+-spec handle_cast?CAST_SPEC({send_notification, binary(), params()}, {noreply, state()});
+                 ?CAST_SPEC({incoming_message, map()},               {noreply, state()}).
 handle_cast({send_notification, Method, Params}, #state{port = Port} = State) ->
   EffectiveParams = effective_params(Method, Params),
   Content = rebar3_bsp_protocol:notification(Method, EffectiveParams),
   ok = rebar3_bsp_protocol:send_message(Port, Content),
-  {noreply, State}.
+  {noreply, State};
+handle_cast({incoming_message, Message}, State) ->
+  {noreply, handle_message(Message, State)}.
 
--spec handle_info({port() | pid(), {data, binary()}}, state()) -> {noreply, state(), {continue, decode}};
-                 ({port() | pid(), {exit_status, integer()}}, state()) -> {stop, {exit_status, integer()}, state()}.
+-spec handle_info({port() | pid(), {data, binary()}}, state())         -> {noreply, state()};
+                 ({port() | pid(), {exit_status, integer()}}, state()) -> {stop, {shutdown, any()}, state()};
+                 ({'EXIT', port() | pid(), normal}, state())           -> {stop, normal, state()}.
 handle_info({Port, {data, NewData}}, #state{port = Port, buffer = OldBuffer} = State) ->
-  {noreply, State#state{ buffer = <<OldBuffer/binary, NewData/binary>> }, {continue, decode}};
+  case rebar3_bsp_protocol:decode_packets(<<OldBuffer/binary, NewData/binary>>) of
+    {ok, Messages, RestData} ->
+      [ ok = post_message(M) || M <- Messages ],
+      { noreply, State#state{ buffer = RestData }};
+    {error, Reason} ->
+      {stop, {decode_error, Reason}, State}
+  end;
 handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) ->
-  {stop, {exit_status, Status}, State#state{port = undefined}};
+  {stop, {shutdown, {exit_status, Status}}, State#state{port = undefined}};
 handle_info({'EXIT', Port, normal}, #state{port = Port} = State) ->
   {stop, normal, State#state{port = undefined}}.
-
--spec handle_continue(decode, state()) -> {noreply, state(), {continue, messages}} | {stop, state(), {decode_error, any()}};
-                     (messages, state()) -> {noreply, state()} | {noreply, state(), {continue, messages}}.
-handle_continue(decode, #state{buffer = Buffer, messages = OldMsgs} = State) ->
-  case rebar3_bsp_protocol:decode_packets(Buffer) of
-    {ok, NewMsgs, RestData} ->
-      {noreply, State#state{ buffer = RestData, messages = OldMsgs ++ NewMsgs }, {continue, messages}};
-    {error, Reason} ->
-      {stop, State, {decode_error, Reason}}
-  end;
-handle_continue(messages, #state{ messages = [] } = State) ->
-  {noreply, State};
-handle_continue(messages, State) ->
-  {noreply, handle_message(State), {continue, messages}}.
 
 %%==============================================================================
 %% Internal Functions
@@ -196,26 +198,26 @@ handle_continue(messages, State) ->
 start_link_impl(PortSpec) ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, PortSpec, []).
 
--spec handle_message(state()) -> state().
-handle_message(#state{messages = [M|Ms]} = State) ->
-  MessageType = rebar3_bsp_protocol:message_type(M),
-  handle_message(MessageType, M, State#state{ messages = Ms }).
-
--spec handle_message(request | response | notification, map(), state()) -> state().
-handle_message(request, M, #state{ requests = Requests} = State) ->
-  State#state{ requests = [M|Requests] };
-handle_message(notification, M, #state{ notifications = Notifications } = State) ->
-  State#state{ notifications = [M|Notifications] };
-handle_message(response, #{ id := Id } = M, #state{ pending = Pending } = State) ->
-  NewPending = case proplists:get_value(Id, Pending) of
-                 undefined ->
-                   ?LOG_WARNING("Discarding unexpected response ~p", [M]),
-                   Pending;
-                 From ->
-                   gen_server:reply(From, M),
-                   proplists:delete(Id, Pending)
-               end,
-  State#state{ pending = NewPending }.
+-spec handle_message(map(), state()) -> state().
+handle_message(Message, #state{ requests = Requests
+                              , notifications = Notifications
+                              , pending = Pending } = State) ->
+  case rebar3_bsp_protocol:message_type(Message) of
+    request ->
+      State#state{ requests = [Message|Requests] };
+    notification ->
+      State#state{ notifications = [Message|Notifications] };
+    response ->
+      Id = rebar3_bsp_protocol:message_id(Message),
+      case proplists:get_value(Id, Pending) of
+        undefined ->
+          ?LOG_WARNING("Discarding unexpected response ~p", [Message]),
+          State;
+        From ->
+          gen_server:reply(From, Message),
+          State#state{ pending = proplists:delete(Id, Pending) }
+      end
+  end.
 
 -spec effective_params(binary(), map() | null) -> map() | null.
 effective_params(Method, Params) when is_map(Params) ->

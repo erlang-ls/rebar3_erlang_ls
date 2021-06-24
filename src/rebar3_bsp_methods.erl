@@ -86,7 +86,13 @@
 
 -spec ?REQUEST_SPEC('buildTarget/compile', compileParams(), compileResult()).
 'buildTarget/compile'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->
-  {ok, NewR3State} = rebar3:run(R3State, ["compile"]),
+  Profiles = target_profiles(Targets),
+  NewR3State = lists:foldl(fun(Profile, AccState) ->
+                               {ok, _State} = rebar3:run(AccState, ["as", binary_to_list(Profile), "compile"]),
+                               AccState
+                           end,
+                           R3State,
+                           Profiles),
   {response, #{ statusCode => 0 }, ServerState#{rebar3_state => NewR3State}}.
 
 %% Internal Functions

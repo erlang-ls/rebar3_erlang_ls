@@ -87,13 +87,16 @@ build_initialize(_Config) ->
                 , displayName := <<"rebar3_bsp">>
                 , version := ExpectedVersion
                 }, Result),
+  ?assertMatch(#{ is_initialized := false }, server_state()),
   ok.
 
 -spec build_initialized(config()) -> ok.
-build_initialized(_Config) ->
-  {ok, _Result} = rebar3_bsp_util:client_request('build/initialize', #{}),
-  Result = rebar3_bsp_util:client_notify('build/initialized', #{}),
-  ?assertEqual(ok, Result),
+build_initialized(Config) ->
+  {ok, _} = rebar3_bsp_util:client_request('build/initialize', #{}),
+  ok = rebar3_bsp_util:client_notify('build/initialized', #{}),
+  sync(Config),
+  ServerState = server_state(),
+  ?assertMatch(#{ is_initialized := true }, ServerState),
   ok.
 
 -spec workspace_buildtargets(config()) -> ok.

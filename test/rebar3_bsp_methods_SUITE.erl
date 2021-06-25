@@ -12,6 +12,7 @@
 -export([ build_initialize/1
         , build_initialized/1
         , workspace_buildtargets/1
+        , workspace_reload/1
         , buildtarget_compile/1
         , buildtarget_sources/1
         , buildtarget_dependencysources/1
@@ -66,6 +67,11 @@ all() ->
   Exports = ?MODULE:module_info(exports),
   [F || {F, 1} <- Exports, not lists:member(F, ExcludedFuns)].
 
+sync(Config) ->
+  {EchoPort, _ClientPid, _ServerPid} = proplists:get_value(local_client_server, Config),
+  ok = rebar3_bsp_echo_port:sync(EchoPort),
+  ok.
+
 %%==============================================================================
 %% Testcases
 %%==============================================================================
@@ -95,6 +101,16 @@ workspace_buildtargets(_Config) ->
   rebar3_bsp_util:initialize_server(),
   {ok, Result} = rebar3_bsp_util:client_request('workspace/buildTargets', #{}),
   ?assertMatch(#{ targets := [#{ id := #{ uri := <<"profile:default">> } }] }, Result),
+  ok.
+
+-spec workspace_reload(config()) -> ok.
+workspace_reload(Config) ->
+  rebar3_bsp_util:initialize_server(),
+  sync(Config),
+  ?assertMatch(#{ is_initialized := true }, server_state()),
+  {ok, null} = rebar3_bsp_util:client_request('workspace/reload', null),
+  sync(Config),
+  ?assertMatch(#{ is_initialized := true }, server_state()),
   ok.
 
 -spec buildtarget_compile(config()) -> ok.
@@ -137,4 +153,12 @@ targets(Targets) ->
 -spec sample_app_build_dir(string()) -> string().
 sample_app_build_dir(Dir) ->
   filename:join([?SAMPLE_APP_DIR, "_build", Dir]).
+
+-spec server_state() -> term().
+server_state() ->
+  sys:get_state(rebar3_bsp_server).
+
+-spec client_state() -> term().
+client_state() ->
+  sys:get_state(rebar3_bsp_client).
 

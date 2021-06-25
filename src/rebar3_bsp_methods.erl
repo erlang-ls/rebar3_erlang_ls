@@ -19,7 +19,7 @@
 
 -define(REQUEST_SPEC(Method, ParamType, ResultType),
         Method(ParamType, state()) ->
-           {response, ResultType, state()}).
+           {response, ResultType, state()} | {error, responseError(), state()}).
 
 -define(NOTIFICATION_SPEC(Method, ParamType),
         Method(ParamType, state()) ->
@@ -45,7 +45,7 @@
                   , dependencySourcesProvider => true
                   , dependencyModulesProvider => false %% TODO?
                   , resourcesProvider => false %% TODO?
-                  , canReload => true %% Actually does nothing
+                  , canReload => true
                   , buildTargetChangedProvider => false %% TODO
                   },
   Result = #{ displayName => <<"rebar3_bsp">>
@@ -88,9 +88,23 @@
   {response, #{targets => BuildTargets}, ServerState}.
 
 -spec ?REQUEST_SPEC('workspace/reload', null, null).
-'workspace/reload'(null, ServerState) ->
-  %% TODO
-  {response, null, ServerState}.
+'workspace/reload'(null, #{rebar3_state := R3State} = ServerState) ->
+  OldDir = file:get_cwd(),
+  BaseDir = rebar_state:dir(R3State),
+  Result = case file:set_cwd(BaseDir) of
+             ok ->
+               rebar3:run(["lock"]);
+             Error ->
+               Error
+           end,
+  case Result of
+    {ok, NewR3State} ->
+      {response, null, ServerState#{ rebar3_state => NewR3State }};
+    {error, Reason} ->
+      file:set_cwd(OldDir), %% What if this fails? Abort?
+      Message = io_lib:format("~p", [Reason]),
+      {error, #{ code => ?LSP_ERROR_INTERNAL_ERROR, message => Message }, ServerState}
+  end.
 
 -spec ?REQUEST_SPEC('buildTarget/sources', buildTargetSourcesParams(), buildTargetSourcesResult()).
 'buildTarget/sources'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->

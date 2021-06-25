@@ -7,6 +7,7 @@
 -export([ start_link/0
         , stop/1
         , set_endpoints/2
+        , sync/1
         ]).
 
 %%==============================================================================
@@ -48,6 +49,15 @@ set_endpoints(Pid, {A, B}) when is_pid(A), is_pid(B) ->
       ok
   end.
 
+-spec sync(pid()) -> ok.
+sync(Pid) ->
+  Ref = make_ref(),
+  Pid ! {self(), Ref, sync},
+  receive
+    {Ref, sync_ok} ->
+      ok
+  end.
+
 %%==============================================================================
 %% Callbacks
 %%==============================================================================
@@ -80,6 +90,8 @@ loop(State) ->
       handle_command(From, Data, State);
     {From, close} ->
       handle_close(From, State);
+    {From, Ref, sync} ->
+      handle_sync(From, Ref, State);
     {system, From, Request} ->
       handle_system_msg(From, Request, State)
   end.
@@ -102,6 +114,19 @@ handle_close(From, State) ->
   {Sender, _Receiver} = get_sender_receiver(From, State),
   Sender ! {self(), closed},
   terminate(closed, State).
+
+-spec handle_sync(pid(), any(), state()) -> no_return().
+handle_sync(From, Ref, State) ->
+  case State of
+    #{ endpoints := {A, B} } ->
+      A ! {self(), {data, <<>>}},
+      B ! {self(), {data, <<>>}},
+      ok;
+    undefined ->
+      ok
+  end,
+  From ! {Ref, sync_ok},
+  loop(State).
 
 -spec handle_system_msg(any(), any(), state()) -> no_return().
 handle_system_msg(From, Request, State) ->

@@ -72,11 +72,15 @@ all() ->
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
   {ok, Result} = rebar3_bsp_util:client_request('build/initialize', #{}),
-  ?assertEqual( #{ bspVersion => ?BSP_VSN
-                 , capabilities => #{}
-                 , displayName => <<"rebar3_bsp">>
-                 , version => rebar3_bsp_connection:version(rebar3_bsp)
-                 }, Result),
+  ExpectedVersion = rebar3_bsp_connection:version(rebar3_bsp),
+  ?assertMatch(#{ bspVersion := ?BSP_VSN
+                , capabilities := #{ compileProvider := [<<"erlang">>]
+                                   , testProvider := [<<"erlang">>]
+                                   , dependencySourcesProvider := true
+                                   }
+                , displayName := <<"rebar3_bsp">>
+                , version := ExpectedVersion
+                }, Result),
   ok.
 
 -spec build_initialized(config()) -> ok.

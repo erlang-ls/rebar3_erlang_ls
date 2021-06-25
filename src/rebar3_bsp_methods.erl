@@ -28,11 +28,30 @@
 -type state() :: rebar3_bsp_server:state().
 
 -spec ?REQUEST_SPEC('build/initialize', initializeBuildParams(), initializeBuildResult()).
-'build/initialize'(_Params, ServerState) ->
+'build/initialize'(#{ capabilities := #{ languageIds := ClientLanguages  } } = _Params, ServerState) ->
+  %% * The server must never respond with build targets for other
+  %% * languages than those that appear in this list. */
+  ServerLanguages = case lists:member(<<"erlang">>, ClientLanguages) of
+                      true ->
+                        [<<"erlang">>];
+                      false ->
+                        []
+                    end,
+  Capabilities = #{ compileProvider => ServerLanguages
+                  , testProvider => ServerLanguages
+                  , runProvider => [] %% TODO
+                  , debugProvider => [] %% TODO
+                  , inverseSourcesProvider => false %% TODO
+                  , dependencySourcesProvider => true
+                  , dependencyModulesProvider => false %% TODO?
+                  , resourcesProvider => false %% TODO?
+                  , canReload => true %% Actually does nothing
+                  , buildTargetChangedProvider => false %% TODO
+                  },
   Result = #{ displayName => <<"rebar3_bsp">>
             , version => rebar3_bsp_connection:version(?BSP_APPLICATION)
             , bspVersion => ?BSP_VSN
-            , capabilities => #{}
+            , capabilities => Capabilities
             },
   {response, Result, ServerState}.
 

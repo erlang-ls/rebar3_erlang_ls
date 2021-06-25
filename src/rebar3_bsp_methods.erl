@@ -65,8 +65,7 @@
                                       }
                    , languageIds => [erlang]
                    , dependencies => []
-                   }
-                  || Profile <- rebar_state:current_profiles(R3State)],
+                   } || Profile <- rebar_state:current_profiles(R3State)],
   {response, #{targets => BuildTargets}, ServerState}.
 
 -spec ?REQUEST_SPEC('workspace/reload', null, null).

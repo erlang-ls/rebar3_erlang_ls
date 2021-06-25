@@ -133,7 +133,7 @@ get_requests() ->
 
 -spec get_notifications() -> [notificationMessage()].
 get_notifications() ->
-  gen_server:call(?SERVER, get_notification).
+  gen_server:call(?SERVER, get_notifications).
 
 %%==============================================================================
 %% gen_server callbacks

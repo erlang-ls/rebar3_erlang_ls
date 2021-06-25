@@ -94,7 +94,7 @@ post_message(Message) ->
 
 -spec send_request(method(), params()) -> any().
 send_request(Method, Params) ->
-  gen_server:send_request(?SERVER, {send_request, rebar3_bsp_util:ensure_binary(Method), Params}).
+  gen_server:send_request(?SERVER, {send_request, rebar3_bsp_util:to_binary(Method), Params}).
 
 -spec receive_response(any(), timeout()) -> {ok, responseResult()} | {error, responseError()} | timeout.
 receive_response(RequestId, Timeout) ->
@@ -125,7 +125,7 @@ wait_response(RequestId, Timeout) ->
 
 -spec send_notification(method(), params()) -> ok.
 send_notification(Method, Params) ->
-  gen_server:cast(?SERVER, {send_notification, rebar3_bsp_util:ensure_binary(Method), Params}).
+  gen_server:cast(?SERVER, {send_notification, rebar3_bsp_util:to_binary(Method), Params}).
 
 -spec get_requests() -> [requestMessage()].
 get_requests() ->

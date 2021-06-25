@@ -18,18 +18,31 @@
 
 %% Content API
 -export([ send_message/2
-        , encode_content/1
-        , decode_content/1
-        , carefully_decode_packets/1
-        , decode_packets/1
-        , decode_packet/1
-        , decode_headers/1
+        , encode_json/1
+        , decode_json/1
+        , peel_messages/2
+        , peel_message/1
+        , peel_content/1
+        , peel_headers/2
         ]).
 
 %%==============================================================================
 %% Includes
 %%==============================================================================
 -include("rebar3_bsp.hrl").
+
+%%==============================================================================
+%% Definitions
+%%==============================================================================
+-define(CONTENT_LENGTH, 'Content-Length').
+
+%%==============================================================================
+%% Types
+%%==============================================================================
+-type headers()      :: map().
+-type buffer()       :: binary().
+-type more()         :: {more, undefined | non_neg_integer()}.
+-type decode_error() :: {error, term(), buffer()}.
 
 %%==============================================================================
 %% Message API
@@ -92,79 +105,103 @@ error(RequestId, Error) ->
 %%==============================================================================
 -spec send_message(port() | pid(), map()) -> ok.
 send_message(Port, Message) when is_port(Port) ->
-  true = port_command(Port, encode_content(Message)),
+  true = port_command(Port, encode_json(Message)),
   ok;
 send_message(Port, Message) when is_pid(Port) ->
-  Port ! {self(), {command, encode_content(Message)}},
+  Port ! {self(), {command, encode_json(Message)}},
   ok.
 
--spec encode_content(map()) -> binary().
-encode_content(Content) ->
-  content(jsx:encode(Content)).
-
--spec decode_content(binary()) -> map().
-decode_content(Content) ->
-  jsx:decode(Content, [return_maps, {labels, atom}]).
-
--spec carefully_decode_packets(binary()) -> {[map()], binary()}.
-carefully_decode_packets(Data) ->
-  case decode_packets(Data) of
-    {ok, Messages, RestData} ->
-      {Messages, RestData};
-    {error, Reason, Messages, RestData} ->
-      ?LOG_CRITICAL("Decode error encountered, trying to continue. [error=~p]", Reason),
-      {Messages, RestData}
+-spec encode_json(jsx:json_term()) -> binary().
+encode_json(Content) ->
+  try
+    content(jsx:encode(Content))
+  catch
+    error:badarg ->
+      error({badarg, Content})
   end.
 
--spec decode_packets(binary()) -> {ok, [map()], binary()} | {error, term(), [map()], binary()}.
-decode_packets(Data) ->
-  decode_packets(Data, []).
+-spec decode_json(binary()) -> jsx:json_term().
+decode_json(Content) ->
+  try
+    jsx:decode(Content, [return_maps, {labels, atom}])
+  catch
+    error:badarg ->
+      error({badarg, Content})
+  end.
 
--spec decode_packets(binary(), [map()]) -> {ok, [map()], binary()} | {error, term(), [map()], binary()}.
-decode_packets(Data, Packets) ->
-  case decode_packet(Data) of
-    {ok, Packet, Rest} ->
-      decode_packets(Rest, [Packet|Packets]);
+-spec peel_messages(fun((jsx:json_term()) -> ok), buffer()) -> buffer().
+peel_messages(MessageCb, Buffer) ->
+  case peel_message(Buffer) of
+    {ok, Message, Rest} ->
+      MessageCb(Message),
+      peel_messages(MessageCb, Rest);
     {more, _More} ->
-      {ok, lists:reverse(Packets), Data};
+      Buffer;
+    {error, Reason, Buffer} ->
+      %% We got back our input buffer, if we loop now we will do so forever. All we can do is bail.
+      ?LOG_EMERGENCY("Decode error without progress, aborting. [error=~p] [buffer=~p]", [Reason, Buffer]),
+      erlang:error(bsp_protocol_error, [MessageCb, Buffer]);
     {error, Reason, Rest} ->
-      {error, Reason, lists:reverse(Packets), Rest}
+      %% The buffer we got is not the original one - some progress happened. Try to recover.
+      {Skipped, Rest} = erlang:split_binary(Buffer, erlang:byte_size(Buffer) - erlang:byte_size(Rest)),
+      ?LOG_ALERT("Decode error. Trying to continue. [error=~p] [skipped=~p]", [Reason, Skipped]),
+      peel_messages(MessageCb, Rest)
   end.
 
--spec decode_packet(binary()) -> {ok, map(), binary()} | {more, undefined | integer()} | {error, term(), binary()}.
-decode_packet(Data) ->
-  case decode_headers(Data) of
-    {ok, #{'Content-Length' := BinaryLength} = _Headers, Rest} ->
-      Length = erlang:binary_to_integer(BinaryLength),
-      case Rest of
-        <<Content:Length/binary, FinalTail/binary>> ->
-          {ok, decode_content(Content), FinalTail};
-        _ ->
-          {more, Length - erlang:byte_size(Rest)}
+-spec peel_message(buffer()) -> {ok, jsx:json_term(), buffer()} | more() | decode_error().
+peel_message(Buffer) ->
+  case peel_content(Buffer) of
+    {ok, Content, Rest} ->
+      try
+        {ok, decode_json(Content), Rest}
+      catch
+        error:{badarg, Content} ->
+          {error, {badjson, Content}, Rest}
       end;
-    {ok, #{}, Rest} ->
-      {error, noheaders, Rest};
     {more, More} ->
       {more, More};
-    {error, Reason} ->
-      {error, Reason, Data}
+    {error, Reason, Rest} ->
+      {error, Reason, Rest}
   end.
 
--spec decode_headers(binary()) -> {ok, map(), binary()} | {more, undefined | integer()} | {error, term()}.
-decode_headers(Data) ->
-  decode_headers(Data, #{}).
-
--spec decode_headers(binary(), map()) -> {ok, map(), binary()} | {more, undefined | integer()} | {error, term()}.
-decode_headers(Data, Headers) ->
-  case erlang:decode_packet(httph_bin, Data, []) of
+-spec peel_content(buffer()) -> {ok, binary(), buffer()} | more() | decode_error().
+%% We progressively peel parts off the front of the input buffer. In the happy
+%% case we expect to have <<Headers/binary, Content/binary, Rest/binary>> as input.
+%% The buffers are named to reflect their expected content: as we chop bits
+%% off, words are dropped from the front.
+peel_content(HeadersContentRest) ->
+  case peel_headers(HeadersContentRest, #{}) of
+    {ok, Headers, ContentRest} ->
+      case rebar3_bsp_util:map_fread(?CONTENT_LENGTH, Headers, "~u") of
+        {ok, [ContentLength], _TrailingGarbage} ->
+          case ContentRest of
+            <<Content:ContentLength/binary, Rest/binary>> ->
+              {ok, Content, Rest};
+            ContentRest ->
+              {more, ContentLength - erlang:byte_size(ContentRest)}
+          end;
+        {error, Reason} ->
+          {error, {badheaders, Reason}, ContentRest}
+      end;
     {more, More} ->
       {more, More};
-    {error, Reason} ->
-      {error, Reason};
+    {error, Reason, Rest} ->
+      {error, Reason, Rest}
+  end.
+
+-spec peel_headers(buffer(), headers()) -> {ok, headers(), buffer()} | more() | decode_error().
+peel_headers(Buffer, Headers) ->
+  case erlang:decode_packet(httph_bin, Buffer, []) of
+    {ok, {http_header, _Bit, Field, _UnmodifiedField, Value}, Rest} ->
+      peel_headers(Rest, Headers#{ Field => Value});
     {ok, http_eoh, Rest} ->
       {ok, Headers, Rest};
-    {ok, {http_header, _Bit, Field, _UnmodifiedField, Value}, Rest} ->
-      decode_headers(Rest, Headers#{Field => Value})
+    {more, More} ->
+      {more, More};
+    {ok, {http_error, HttpError}, Rest} ->
+      {error, {{http_error, HttpError}, [{headers, Headers}]}, Rest};
+    {error, Reason} ->
+      {error, {badheaders, Reason}, Buffer}
   end.
 
 %%==============================================================================
@@ -177,3 +214,4 @@ content(Body) ->
 -spec headers(binary()) -> iolist().
 headers(Body) ->
   io_lib:format("Content-Length: ~p\r\n", [byte_size(Body)]).
+

@@ -101,8 +101,7 @@ handle_cast({incoming_message, Message}, State) ->
 
 -spec handle_info({pid() | port(), {data, binary()}}, state()) -> {noreply, state()} | {stop, term(), state()}.
 handle_info({Port, {data, NewData}}, #{ port := Port, buffer := OldBuffer } = State) ->
-  {Messages, RestData} = rebar3_bsp_protocol:carefully_decode_packets(<<OldBuffer/binary, NewData/binary>>),
-  [ ok = post_message(M) || M <- Messages ],
+  RestData = rebar3_bsp_protocol:peel_messages(fun post_message/1, <<OldBuffer/binary, NewData/binary>>),
   {noreply, State#{ buffer => RestData }}.
 
 -spec format_status(normal | terminate, list()) -> term().

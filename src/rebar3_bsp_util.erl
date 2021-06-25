@@ -9,6 +9,8 @@
         , maybe_stop/2
         , new_rebar_state_from_file/1
         , to_binary/1
+        , to_string/1
+        , map_fread/3
         ]).
 
 -include_lib("kernel/include/logger.hrl").
@@ -72,4 +74,30 @@ to_binary(B) when is_binary(B) ->
   B;
 to_binary(L) when is_list(L) ->
   list_to_binary(L).
+
+-spec to_string(atom() | binary() | list()) -> string().
+to_string(A) when is_atom(A) ->
+  atom_to_list(A);
+to_string(B) when is_binary(B) ->
+  binary_to_list(B);
+to_string(L) when is_list(L) ->
+  L.
+
+-spec map_fread(term(), map(), string()) -> {ok, [io_lib:fread_item()], string()} | {error, term()}.
+map_fread(Key, Map, Format) ->
+  try
+    Value = maps:get(Key, Map),
+    StringVal = to_string(Value),
+    case io_lib:fread(Format, StringVal) of
+      {ok, Results, LeftOverChars} ->
+        {ok, Results, LeftOverChars};
+      {error, {fread, Error}} ->
+        {error, {fread, Error}};
+      {more, _RestFormat, _Nchars, _InputStack} = Error ->
+        {error, {fread, Error}}
+    end
+  catch
+    error:{badkey, Key} ->
+      {error, {badkey, Key}}
+  end.
 

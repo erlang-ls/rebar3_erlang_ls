@@ -103,7 +103,7 @@ error(RequestId, Error) ->
 %%==============================================================================
 %% Content API
 %%==============================================================================
--spec send_message(port() | pid(), map()) -> ok.
+-spec send_message(port() | pid(), jsx:json_term()) -> ok.
 send_message(Port, Message) when is_port(Port) ->
   true = port_command(Port, encode_json(Message)),
   ok;
@@ -139,7 +139,7 @@ peel_messages(MessageCb, Buffer) ->
       Buffer;
     {error, Reason, Buffer} ->
       %% We got back our input buffer, if we loop now we will do so forever. All we can do is bail.
-      ?LOG_EMERGENCY("Decode error without progress, aborting. [error=~p] [buffer=~p]", [Reason, Buffer]),
+      ?LOG_EMERGENCY("Decode error without progress, aborting. [error=~p]", [Reason]),
       erlang:error(bsp_protocol_error, [MessageCb, Buffer]);
     {error, Reason, Rest} ->
       %% The buffer we got is not the original one - some progress happened. Try to recover.
@@ -156,12 +156,12 @@ peel_message(Buffer) ->
         {ok, decode_json(Content), Rest}
       catch
         error:{badarg, Content} ->
-          {error, {badjson, Content}, Rest}
+          {error, {{badjson, Content}, #{buffer => Buffer}}, Rest}
       end;
     {more, More} ->
       {more, More};
-    {error, Reason, Rest} ->
-      {error, Reason, Rest}
+    {error, {Reason, ErrorInfoMap}, Rest} ->
+      {error, {Reason, ErrorInfoMap#{buffer => Buffer}}, Rest}
   end.
 
 -spec peel_content(buffer()) -> {ok, binary(), buffer()} | more() | decode_error().
@@ -181,7 +181,7 @@ peel_content(HeadersContentRest) ->
               {more, ContentLength - erlang:byte_size(ContentRest)}
           end;
         {error, Reason} ->
-          {error, {badheaders, Reason}, ContentRest}
+          {error, {{badheaders, Reason}, #{headers => Headers}}, ContentRest}
       end;
     {more, More} ->
       {more, More};
@@ -199,7 +199,7 @@ peel_headers(Buffer, Headers) ->
     {more, More} ->
       {more, More};
     {ok, {http_error, HttpError}, Rest} ->
-      {error, {{http_error, HttpError}, [{headers, Headers}]}, Rest};
+      {error, {{http_error, HttpError}, #{headers => Headers}}, Rest};
     {error, Reason} ->
       {error, {badheaders, Reason}, Buffer}
   end.

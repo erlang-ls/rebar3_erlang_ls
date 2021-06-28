@@ -2,7 +2,7 @@
 
 -export([ file/1
         , dir/1
-        , profile/1
+        , profile/1, profile/2
         , sanitize/1
         , compose/1
         , extract/3
@@ -14,22 +14,35 @@
 -type uri_string() :: uri_string:uri_string().
 -type uri_map()    :: uri_string:uri_map().
 
+-define(PROFILE_SCHEME, <<"profile">>).
+-define(FILE_SCHEME, <<"file">>).
+
 -spec file(file:name_all()) -> binary().
 file(Filename) ->
   %% Filenames must never have a trailing slash
   Sanitized = sanitize(Filename),
-  compose(#{ path => Sanitized }).
+  compose(#{ scheme => ?FILE_SCHEME, path => Sanitized }).
 
 -spec dir(file:name_all()) -> binary().
 dir(Dirname) ->
   %% Dirnames must always end with a slash
   Sanitized = sanitize(Dirname),
-  compose(#{ path => <<Sanitized/binary, "/">> }).
+  compose(#{ scheme => ?FILE_SCHEME, path => <<Sanitized/binary, "/">> }).
 
--spec profile(file:name_all()) -> binary().
+-spec profile(atom() | unicode:chardata()) -> binary().
 profile(Profile) ->
-  Sanitized = sanitize(Profile),
-  compose(#{ scheme => "profile", path => Sanitized }).
+  profile(Profile, []).
+
+-spec profile(atom() | unicode:chardata(), [{unicode:chardata(), unicode:chardata() | true}]) -> binary().
+profile(Profile, Params) ->
+  BaseMap = #{ scheme => ?PROFILE_SCHEME, path => rebar3_bsp_util:to_binary(Profile) },
+  UriMap = case Params of
+             [] ->
+               BaseMap;
+             Params ->
+               BaseMap#{ query => uri_string:compose_query(Params) }
+           end,
+  compose(UriMap).
 
 -spec sanitize(file:name_all()) -> binary().
 sanitize(Filename) ->
@@ -39,9 +52,7 @@ sanitize(Filename) ->
 
 -spec compose(uri_map()) -> binary().
 compose(UriMap) ->
-  DefaultsMap = #{ scheme => "file" },
-  EffectiveMap = maps:merge(DefaultsMap, UriMap),
-  Uri = uri_string:recompose(EffectiveMap),
+  Uri = uri_string:recompose(UriMap),
   rebar3_bsp_util:to_binary(Uri).
 
 -spec extract(atom(), uri_string() | uri_map(), uri_map()) -> binary().

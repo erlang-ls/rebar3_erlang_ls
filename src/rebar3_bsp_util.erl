@@ -76,7 +76,9 @@ to_binary(A) when is_atom(A) ->
 to_binary(B) when is_binary(B) ->
   B;
 to_binary(L) when is_list(L) ->
-  list_to_binary(L).
+  list_to_binary(L);
+to_binary(X) ->
+  error(badarg, [X]).
 
 -spec to_string(atom() | binary() | list()) -> string().
 to_string(A) when is_atom(A) ->
@@ -84,7 +86,9 @@ to_string(A) when is_atom(A) ->
 to_string(B) when is_binary(B) ->
   binary_to_list(B);
 to_string(L) when is_list(L) ->
-  L.
+  L;
+to_string(X) ->
+  error(badarg, [X]).
 
 -spec map_fread(term(), map(), string()) -> {ok, [io_lib:fread_item()], string()} | {error, term()}.
 map_fread(Key, Map, Format) ->

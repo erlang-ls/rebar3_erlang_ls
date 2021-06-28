@@ -87,7 +87,7 @@
 
 -spec ?REQUEST_SPEC('workspace/reload', null, null).
 'workspace/reload'(null, #{rebar3_state := R3State} = ServerState) ->
-  OldDir = file:get_cwd(),
+  {ok, OldDir} = file:get_cwd(),
   BaseDir = rebar_state:dir(R3State),
   Result = case file:set_cwd(BaseDir) of
              ok ->

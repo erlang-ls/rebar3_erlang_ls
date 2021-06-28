@@ -122,7 +122,7 @@ handle_sync(From, Ref, State) ->
       A ! {self(), {data, <<>>}},
       B ! {self(), {data, <<>>}},
       ok;
-    undefined ->
+    #{ endpoints := undefined } ->
       ok
   end,
   From ! {Ref, sync_ok},

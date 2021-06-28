@@ -31,22 +31,20 @@
 'build/initialize'(#{ capabilities := #{ languageIds := ClientLanguages  } } = _Params, ServerState) ->
   %% * The server must never respond with build targets for other
   %% * languages than those that appear in this list. */
-  ServerLanguages = case lists:member(<<"erlang">>, ClientLanguages) of
-                      true ->
-                        [<<"erlang">>];
-                      false ->
-                        []
-                    end,
-  Capabilities = #{ compileProvider => ServerLanguages
-                  , testProvider => ServerLanguages
-                  , runProvider => [] %% TODO
-                  , debugProvider => [] %% TODO
-                  , inverseSourcesProvider => false %% TODO
-                  , dependencySourcesProvider => true
-                  , dependencyModulesProvider => false %% TODO?
-                  , resourcesProvider => false %% TODO?
-                  , canReload => true
-                  , buildTargetChangedProvider => false %% TODO
+  ServerLanguages = [<<"erlang">>],
+  MutualLanguages = rebar3_bsp_util:lists_intersection([ClientLanguages, ServerLanguages]),
+  SupportedProvider = #{ languageIds => MutualLanguages },
+  UnsupportedProvider = #{ languageIds => [] },
+  Capabilities = #{ compileProvider => SupportedProvider % Advertized iff client supports
+                  , testProvider => SupportedProvider    % Advertized iff client supports
+                  , runProvider => UnsupportedProvider   % Advertized iff client supports - TODO
+                  , debugProvider => UnsupportedProvider % Advertized iff client supports - TODO
+                  , inverseSourcesProvider => false      % Always advertized - TODO
+                  , dependencySourcesProvider => true    % Always advertized
+                  , dependencyModulesProvider => false   % Always advertized - TODO?
+                  , resourcesProvider => false           % Always advertized - TODO?
+                  , canReload => true                    % Always advertized
+                  , buildTargetChangedProvider => false  % Always advertized - TODO
                   },
   Result = #{ displayName => <<"rebar3_bsp">>
             , version => rebar3_bsp_connection:version(?BSP_APPLICATION)

@@ -28,7 +28,8 @@
 %%==============================================================================
 %% Definitions
 %%==============================================================================
--define(SAMPLE_APP_DIR, rebar3_bsp_test:sample_app_dir()).
+-define(SAMPLE_APP_DIR, rebar3_bsp_util:sample_app_dir()).
+-define(assertMapKeyEqual(Expected, Key, Map), ?assertEqual(Expected, maps:get(Key, Map))).
 
 %%==============================================================================
 %% Types
@@ -78,16 +79,15 @@ sync(Config) ->
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
   {ok, Result} = rebar3_bsp_util:client_request('build/initialize', #{}),
-  ExpectedVersion = rebar3_bsp_connection:version(rebar3_bsp),
-  ?assertMatch(#{ bspVersion := ?BSP_VSN
-                , capabilities := #{ compileProvider := [<<"erlang">>]
-                                   , testProvider := [<<"erlang">>]
-                                   , dependencySourcesProvider := true
-                                   }
-                , displayName := <<"rebar3_bsp">>
-                , version := ExpectedVersion
-                }, Result),
-  ?assertMatch(#{ is_initialized := false }, server_state()),
+  ?assertMapKeyEqual(rebar3_bsp_connection:version(rebar3_bsp), version, Result),
+  ?assertMapKeyEqual(?BSP_VSN, bspVersion, Result),
+  ?assertMapKeyEqual(<<"rebar3_bsp">>, displayName, Result),
+  #{ capabilities := Capabilities } = Result,
+  ErlangProvider = #{ languageIds => [<<"erlang">>] },
+  ?assertMapKeyEqual(ErlangProvider, compileProvider, Capabilities),
+  ?assertMapKeyEqual(ErlangProvider, testProvider, Capabilities),
+  ?assertMapKeyEqual(true, canReload, Capabilities),
+  ?assertMapKeyEqual(true, dependencySourcesProvider, Capabilities),
   ok.
 
 -spec build_initialized(config()) -> ok.

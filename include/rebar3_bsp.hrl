@@ -121,14 +121,18 @@
                                   , data => any()
                                   }.
 -type compileProvider() :: #{ languageIds := [binary()] }.
--type testProvider() :: #{ languageIds := [binary()] }.
 -type runProvider() :: #{ languageIds := [binary()] }.
+-type testProvider() :: #{ languageIds := [binary()] }.
+-type debugProvider() :: #{ languageIds := [binary()] }.
 -type buildServerCapabilities() :: #{ compileProvider => compileProvider()
                                     , testProvider => testProvider()
                                     , runProvider => runProvider()
+                                    , debugProvider => debugProvider()
                                     , inverseSourcesProvider => boolean()
                                     , dependencySourcesProvider => boolean()
+                                    , dependencyModulesProvider => boolean()
                                     , resourcesProvider => boolean()
+                                    , canReload => boolean()
                                     , buildTargetChangedProvider => boolean()
                                     }.
 -type initializeBuildResult() :: #{ displayName := binary()

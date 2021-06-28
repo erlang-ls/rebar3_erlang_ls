@@ -11,11 +11,14 @@
         , to_binary/1
         , to_string/1
         , map_fread/3
+        , lists_intersection/1
+        , lists_union/1
         ]).
 
 -include_lib("kernel/include/logger.hrl").
 
 -define(TIMEOUT, 5000).
+-define(SETS, sets).
 
 -spec client_request(binary() | atom(), map()) -> any().
 client_request(Method, Params) ->
@@ -100,4 +103,19 @@ map_fread(Key, Map, Format) ->
     error:{badkey, Key} ->
       {error, {badkey, Key}}
   end.
+
+-spec lists_intersection([list()]) -> list().
+lists_intersection(Lists) ->
+  lists_set_operation(intersection, Lists).
+
+-spec lists_union([list()]) -> list().
+lists_union(Lists) ->
+  lists_set_operation(union, Lists).
+
+-spec lists_set_operation(atom(), [list()]) -> list().
+lists_set_operation(Op, [_|_] = Lists) ->
+  F = fun(Set, Acc) -> ?SETS:Op(Set, Acc) end,
+  [H|T] = [ ?SETS:from_list(L) || L <- Lists ],
+  Result = lists:foldl(F, H, T),
+  ?SETS:to_list(Result).
 

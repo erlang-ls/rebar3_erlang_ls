@@ -10,6 +10,7 @@
         , handle_call/3
         , handle_cast/2
         , handle_info/2
+        , handle_continue/2
         , format_status/2
         ]).
 
@@ -99,14 +100,48 @@ handle_cast({incoming_message, Message}, State) ->
       {noreply, NewState}
   end.
 
--spec handle_info({pid() | port(), {data, binary()}}, state()) -> {noreply, state()} | {stop, term(), state()}.
+-spec handle_info({pid() | port(), {data, binary()}}, state()) -> {noreply, state(), {continue, decode}}.
 handle_info({Port, {data, NewData}}, #{ port := Port, buffer := OldBuffer } = State) ->
-  RestData = rebar3_bsp_protocol:peel_messages(fun post_message/1, <<OldBuffer/binary, NewData/binary>>),
-  {noreply, State#{ buffer => RestData }}.
+  {noreply, State#{ buffer => <<OldBuffer/binary, NewData/binary>> }, {continue, decode}}.
+
+-spec handle_continue(decode, state()) -> {noreply, state()} | {noreply, state(), {continue, decode}} | {stop, term(), state()}.
+handle_continue(decode, #{ buffer := Buffer } = State) ->
+  case rebar3_bsp_protocol:peel_message(Buffer) of
+    {ok, Message, Rest} ->
+      NewState = handle_message(Message, State),
+      {noreply, NewState#{ buffer => Rest }, {continue, decode}};
+    {more, _More} ->
+      {noreply, State};
+    {error, Reason, Buffer} ->
+      %% We got back our input buffer, if we loop now we will do so forever. All we can do is bail.
+      ?LOG_EMERGENCY("Decode error without progress, aborting. [error=~p]", [Reason]),
+      {stop, {error, {bsp_protocol_error, Reason}}, State};
+    {error, Reason, Rest} ->
+      %% The buffer we got is not the original one - some progress happened. Try to recover.
+      {Skipped, Rest} = erlang:split_binary(Buffer, erlang:byte_size(Buffer) - erlang:byte_size(Rest)),
+      ?LOG_ALERT("Decode error. Trying to continue. [error=~p] [skipped=~p]", [Reason, Skipped]),
+      {noreply, State#{ buffer => Rest }, {continue, decode}}
+  end.
 
 -spec format_status(normal | terminate, list()) -> term().
 format_status(_Opt, [_PDict, State]) ->
   [{data, [{"State", State#{ rebar3_state => rebar3_state_redacted }}]}].
+
+-spec handle_message(map(), state()) -> state().
+handle_message(Message, State) ->
+  MessageType = rebar3_bsp_protocol:message_type(Message),
+  case dispatch_message(MessageType, Message, State) of
+    {response, Reply, #{ port := Port } = NewState} ->
+      ok = rebar3_bsp_protocol:send_message(Port, Reply),
+      NewState;
+    {noresponse, NewState} ->
+      NewState;
+    {exit, ExitCode, NewState} ->
+      RequestId = gen_server:send_request(self(), {shutdown, {exit_code, ExitCode}}),
+      gen_server:receive_response(RequestId, 0),
+      NewState
+  end.
+
 
 -spec dispatch_message(atom(), map(), state()) ->
         {noresponse, state()} |

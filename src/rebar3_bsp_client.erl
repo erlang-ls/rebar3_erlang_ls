@@ -28,6 +28,7 @@
         , handle_call/3
         , handle_cast/2
         , handle_info/2
+        , handle_continue/2
         ]).
 %%==============================================================================
 %% Includes
@@ -76,7 +77,7 @@ start_link({root, RootPath}) ->
 start_link({exec, Executable, Args, PortSettings}) ->
   start_link_impl({ open_port
                   , {spawn_executable, Executable}
-                  , PortSettings ++ [{args, Args}, use_stdio, binary, exit_status]
+                  , PortSettings ++ [{args, Args}, {env, [{"REBAR_COLOR", "none"}]}, use_stdio, binary, exit_status]
                   });
 start_link({port, Port}) ->
   start_link_impl({reuse_port, Port}).
@@ -140,7 +141,6 @@ get_notifications() ->
 %%==============================================================================
 -spec init({open_port | reuse_port, any()}) -> {ok, state()}.
 init(PortSpec) ->
-  ?LOG_DEBUG("Initializing with PortSpec = ~p", [PortSpec]),
   Port = case PortSpec of
            {open_port, PortName, PortSettings} ->
              erlang:open_port(PortName, PortSettings);
@@ -179,12 +179,23 @@ handle_cast({incoming_message, Message}, State) ->
                  ({port() | pid(), {exit_status, integer()}}, state()) -> {stop, {shutdown, any()}, state()};
                  ({'EXIT', port() | pid(), normal}, state())           -> {stop, normal, state()}.
 handle_info({Port, {data, NewData}}, #state{port = Port, buffer = OldBuffer} = State) ->
-  RestData = rebar3_bsp_protocol:peel_messages(fun post_message/1, <<OldBuffer/binary, NewData/binary>>),
-  { noreply, State#state{ buffer = RestData }};
+  NewBuffer = <<OldBuffer/binary, NewData/binary>>,
+  { noreply, State#state{ buffer = NewBuffer }, {continue, decode}};
 handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) ->
   {stop, {shutdown, {exit_status, Status}}, State#state{port = undefined}};
 handle_info({'EXIT', Port, normal}, #state{port = Port} = State) ->
   {stop, normal, State#state{port = undefined}}.
+
+handle_continue(decode, #state{ buffer = Buffer } = State) ->
+  case rebar3_bsp_protocol:peel_message(Buffer) of
+    {ok, Message, Rest} ->
+      {noreply, handle_message(Message, State#state{ buffer = Rest }), {continue, decode}};
+    {more, _More} ->
+      {noreply, State};
+    {error, Reason, Rest} ->
+      ?LOG_CRITICAL("Protocol decode error: ~p", [Reason]),
+      {noreply, State#state{ buffer = Rest }, {continue, decode}}
+  end.
 
 %%==============================================================================
 %% Internal Functions
@@ -230,7 +241,7 @@ default_params(<<"build/initialize">>) ->
 default_params(Method) when is_binary(Method) ->
   #{}.
 
--spec unpeel_response(map()) -> {ok, map()} | {error, map()}.
+-spec unpeel_response(map()) -> {ok, term()} | {error, term()}.
 unpeel_response(#{ error := Error }) ->
   {error, Error};
 unpeel_response(#{ result := Result}) ->

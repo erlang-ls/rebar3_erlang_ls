@@ -19,7 +19,6 @@
 -export([ send_message/1
         , encode_json/1
         , decode_json/1
-        , peel_messages/1
         , peel_message/1
         , peel_content/1
         , peel_headers/1
@@ -60,7 +59,6 @@ groups() ->
     , [ send_message
       , encode_json
       , decode_json
-      , peel_messages
       , peel_message
       , peel_content
       , peel_headers
@@ -159,73 +157,6 @@ decode_json(_Config) ->
   ?assertEqual(<<"foo">>, ?M:decode_json(<<"\"foo\"">>)),
   ?assertError({badarg, <<"foo">>}, ?M:decode_json(<<"foo">>)),
   ?assertEqual(#{ foo => <<"bar">> }, ?M:decode_json(<<"{\"foo\":\"bar\"}">>)),
-  ok.
-
--spec make_message_callback() -> {reference(), fun((jsx:json_term()) -> ok)}.
-make_message_callback() ->
-  Self = self(),
-  Ref = erlang:make_ref(),
-  Fun = fun(JsonTerm) -> Self ! {Ref, JsonTerm}, ok end,
-  {Ref, Fun}.
-
--spec receive_messages(reference()) -> [term()].
-receive_messages(Ref) ->
-  receive_messages(Ref, []).
-
--spec receive_messages(reference(), [term()]) -> [term()].
-receive_messages(Ref, Acc) ->
-  receive
-    {Ref, Term} ->
-      receive_messages(Ref, [Term|Acc])
-  after 0 ->
-      lists:reverse(Acc)
-  end.
-
-?SPEC(peel_messages).
-peel_messages(_Config) ->
-  %% Our sample messages and buffers
-  Msg1 = <<"hello">>,
-  Msg2 = #{ foo => 1024 },
-  Msg1Buf = make_protocol_buffer(Msg1),
-  Msg2Buf = make_protocol_buffer(Msg2),
-  Garbage = <<"garbage">>,
-  Terminators = <<"\r\n\r\n\r\n\r\n\r\n">>,
-  ColonsEtc = <<"Content-Length;;;: :::::::::::\r\n:::::::\r\n\0\0\0\0\r\r\r\r\n\r\n\r\nfooobarbaz{}{}{}{}{}\r\n\r\n\r\n">>,
-  %% Empty buffer
-  {Ref1, Cb1} = make_message_callback(),
-  Buf1 = <<>>,
-  ?assertEqual(<<>>, ?M:peel_messages(Cb1, Buf1)),
-  ?assertEqual([], receive_messages(Ref1)),
-  %% Buffer with one complete message
-  {Ref2, Cb2} = make_message_callback(),
-  ?assertEqual(<<>>, ?M:peel_messages(Cb2, Msg1Buf)),
-  ?assertEqual([Msg1], receive_messages(Ref2)),
-  %% Buffer with two messages
-  {Ref3, Cb3} = make_message_callback(),
-  ?assertEqual(<<>>, ?M:peel_messages(Cb3, <<Msg1Buf/binary, Msg2Buf/binary>>)),
-  ?assertEqual([Msg1, Msg2], receive_messages(Ref3)),
-  %% Buffer with two messages and some trailing data
-  {Ref4, Cb4} = make_message_callback(),
-  ?assertEqual(Garbage, ?M:peel_messages(Cb4, <<Msg1Buf/binary, Msg2Buf/binary, Garbage/binary>>)),
-  ?assertEqual([Msg1, Msg2], receive_messages(Ref4)),
-  %% Recoverable garbage
-  {Ref5, Cb5} = make_message_callback(),
-  ?assertEqual(<<>>, ?M:peel_messages(Cb5, <<Garbage/binary, Terminators/binary>>)),
-  ?assertEqual([], receive_messages(Ref5)),
-  %% Recoverable garbage and some messages
-  {Ref6, Cb6} = make_message_callback(),
-  ?assertEqual(Garbage, ?M:peel_messages(Cb6, << Garbage/binary, Terminators/binary
-                                               , Msg1Buf/binary, Terminators/binary
-                                               , Msg2Buf/binary, Garbage/binary>>)),
-  ?assertEqual([Msg1, Msg2], receive_messages(Ref6)),
-  %% More Garbage
-  {Ref7, Cb7} = make_message_callback(),
-  ?assertEqual(<<>>, ?M:peel_messages(Cb7, ColonsEtc)),
-  ?assertEqual([], receive_messages(Ref7)),
-  %% Unrecoverable error
-  {Ref8, Cb8} = make_message_callback(),
-  ?assertError(badarg, ?M:peel_messages(Cb8, foobarbaz)),
-  ?assertEqual([], receive_messages(Ref8)),
   ok.
 
 ?SPEC(peel_message).

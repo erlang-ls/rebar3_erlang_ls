@@ -10,6 +10,7 @@
         , new_rebar_state_from_file/1
         , to_binary/1
         , to_string/1
+        , to_atom/1
         , map_fread/3
         , lists_intersection/1
         , lists_union/1
@@ -45,8 +46,7 @@ initialize_server() ->
 bring_up_local_client_server(R3State) ->
   {ok, EchoPort} = rebar3_bsp_echo_port:start_link(),
   {ok, ClientPid} = rebar3_bsp_client:start_link({port, EchoPort}),
-  {ok, ServerPid} = rebar3_bsp_server:start_link(#{ rebar3_state => R3State
-                                                  , port => EchoPort }),
+  {ok, ServerPid} = rebar3_bsp_server:start_link(R3State, EchoPort),
   ok = rebar3_bsp_echo_port:set_endpoints(EchoPort, {ClientPid, ServerPid}),
   {ok, {EchoPort, ClientPid, ServerPid}}.
 
@@ -89,6 +89,16 @@ to_string(B) when is_binary(B) ->
 to_string(L) when is_list(L) ->
   L;
 to_string(X) ->
+  error(badarg, [X]).
+
+-spec to_atom(atom() | binary() | list()) -> atom().
+to_atom(A) when is_atom(A) ->
+  A;
+to_atom(B) when is_binary(B) ->
+  binary_to_atom(B);
+to_atom(L) when is_list(L) ->
+  list_to_atom(L);
+to_atom(X) ->
   error(badarg, [X]).
 
 -spec map_fread(term(), map(), string()) -> {ok, [io_lib:fread_item()], string()} | {error, term()}.

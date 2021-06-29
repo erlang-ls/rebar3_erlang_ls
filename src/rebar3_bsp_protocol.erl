@@ -20,7 +20,6 @@
 -export([ send_message/2
         , encode_json/1
         , decode_json/1
-        , peel_messages/2
         , peel_message/1
         , peel_content/1
         , peel_headers/2
@@ -61,7 +60,7 @@ message_type(Message) ->
       notification
   end.
 
--spec message_id(map()) -> requestId().
+-spec message_id(map()) -> requestId() | null.
 message_id(Message) ->
   case Message of
     #{ id := Id } ->
@@ -127,25 +126,6 @@ decode_json(Content) ->
   catch
     error:badarg ->
       error({badarg, Content})
-  end.
-
--spec peel_messages(fun((jsx:json_term()) -> ok), buffer()) -> buffer().
-peel_messages(MessageCb, Buffer) ->
-  case peel_message(Buffer) of
-    {ok, Message, Rest} ->
-      MessageCb(Message),
-      peel_messages(MessageCb, Rest);
-    {more, _More} ->
-      Buffer;
-    {error, Reason, Buffer} ->
-      %% We got back our input buffer, if we loop now we will do so forever. All we can do is bail.
-      ?LOG_EMERGENCY("Decode error without progress, aborting. [error=~p]", [Reason]),
-      erlang:error(bsp_protocol_error, [MessageCb, Buffer]);
-    {error, Reason, Rest} ->
-      %% The buffer we got is not the original one - some progress happened. Try to recover.
-      {Skipped, Rest} = erlang:split_binary(Buffer, erlang:byte_size(Buffer) - erlang:byte_size(Rest)),
-      ?LOG_ALERT("Decode error. Trying to continue. [error=~p] [skipped=~p]", [Reason, Skipped]),
-      peel_messages(MessageCb, Rest)
   end.
 
 -spec peel_message(buffer()) -> {ok, jsx:json_term(), buffer()} | more() | decode_error().

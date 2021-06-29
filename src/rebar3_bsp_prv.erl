@@ -50,7 +50,7 @@ start_server(State) ->
   {ok, Pid} = supervisor:start_child(rebar3_bsp_sup, #{ id => rebar3_bsp_server
                                                       , start => { rebar3_bsp_server
                                                                  , start_link
-                                                                 , [#{ rebar3_state => State }]
+                                                                 , [State]
                                                                  }
                                                       , restart => temporary
                                                       }),

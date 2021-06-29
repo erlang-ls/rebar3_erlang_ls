@@ -79,7 +79,7 @@ message_type(_Config) ->
 
 ?SPEC(message_id).
 message_id(_Config) ->
-  ?assertEqual(foo, ?M:message_id(#{ id => foo })),
+  ?assertEqual(<<"foo">>, ?M:message_id(#{ id => <<"foo">> })),
   ?assertEqual(null, ?M:message_id(#{})),
   ok.
 
@@ -115,7 +115,7 @@ response(_Config) ->
 ?SPEC(error).
 error(_Config) ->
   RequestId = 16#cafe,
-  Error = #{ unexpected => <<"failure">> },
+  Error = #{ code => 16#dead, message => <<"failure">> },
   Expected = jsonrpc_msg(#{ id => RequestId, error => Error }),
   ?assertEqual(Expected, ?M:error(RequestId, Error)),
   ok.

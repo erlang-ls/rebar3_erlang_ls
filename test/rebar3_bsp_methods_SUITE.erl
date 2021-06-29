@@ -13,9 +13,9 @@
         , build_initialized/1
         , workspace_buildtargets/1
         , workspace_reload/1
-        , buildtarget_compile/1
         , buildtarget_sources/1
         , buildtarget_dependencysources/1
+        , buildtarget_compile/1
         ]).
 
 %%==============================================================================
@@ -140,18 +140,32 @@ buildtarget_sources(_Config) ->
 -spec buildtarget_dependencysources(config()) -> ok.
 buildtarget_dependencysources(_Config) ->
   rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/dependencySources', targets([<<"profile:default">>])),
+  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/dependencySources', targets(["default"])),
   #{ items := [#{ target := #{ uri := <<"profile:default">> }, sources := Sources }] } = Result,
   [ResultMeckDir] = Sources,
   ?assertEqual(rebar3_bsp_uri:dir(sample_app_build_dir("default/lib/meck")), ResultMeckDir),
   ok.
 
+-spec buildtarget_compile(config()) -> ok.
+buildtarget_compile(_Config) ->
+  rebar3_bsp_util:initialize_server(),
+  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/compile', targets(["default", "test"])),
+  ?assertEqual(#{ statusCode => 0 }, Result),
+  ?assert(filelib:is_dir(sample_app_build_dir("test/lib/meck"))),
+  ?assert(filelib:is_dir(sample_app_build_dir("default/lib/sample"))),
+  ok.
+
 %%==============================================================================
 %% Internal Functions
 %%==============================================================================
--spec targets([binary()]) -> #{ targets => [#{ uri := binary()}] }.
+-spec targets([unicode:chardata()]) -> #{ targets := [#{ uri := binary()}] }.
 targets(Targets) ->
-  #{ targets => [#{ uri => T } || T <- Targets] }.
+  #{ targets => [ target(T, []) || T <- Targets] }.
+
+-spec target(unicode:chardata(), [{unicode:chardata(), unicode:chardata() | true}]) -> #{ uri := binary() }.
+target(Profile, Params) ->
+  Uri = rebar3_bsp_uri:profile(Profile, Params),
+  #{ uri => Uri }.
 
 -spec sample_app_build_dir(string()) -> string().
 sample_app_build_dir(Dir) ->

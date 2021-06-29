@@ -25,7 +25,7 @@
         Method(ParamType, state()) ->
            {noresponse, state()} | {exit, integer(), state()}).
 
--type state() :: rebar3_bsp_server:state().
+-type state() :: rebar3_bsp_agent:state().
 
 -spec ?REQUEST_SPEC('build/initialize', initializeBuildParams(), initializeBuildResult()).
 'build/initialize'(#{ capabilities := #{ languageIds := ClientLanguages  } } = _Params, ServerState) ->

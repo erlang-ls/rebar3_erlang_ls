@@ -67,8 +67,8 @@ build_initialize(_Config) ->
                 , version := Version 
                 , capabilities := #{ canReload := true
                                    , dependencySourcesProvider := true
-                                   , compileProvider := [<<"erlang">>]
-                                   , testProvider := [<<"erlang">>]
+                                   , compileProvider := #{ languageIds := [<<"erlang">>] }
+                                   , testProvider := #{ languageIds := [<<"erlang">>] }
                                    }
                 }, Result),
   ok.

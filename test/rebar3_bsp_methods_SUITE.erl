@@ -68,11 +68,6 @@ all() ->
   Exports = ?MODULE:module_info(exports),
   [F || {F, 1} <- Exports, not lists:member(F, ExcludedFuns)].
 
-sync(Config) ->
-  {EchoPort, _ClientPid, _ServerPid} = proplists:get_value(local_client_server, Config),
-  ok = rebar3_bsp_echo_port:sync(EchoPort),
-  ok.
-
 %%==============================================================================
 %% Testcases
 %%==============================================================================
@@ -91,12 +86,9 @@ build_initialize(_Config) ->
   ok.
 
 -spec build_initialized(config()) -> ok.
-build_initialized(Config) ->
+build_initialized(_Config) ->
   {ok, _} = rebar3_bsp_util:client_request('build/initialize', #{}),
   ok = rebar3_bsp_util:client_notify('build/initialized', #{}),
-  sync(Config),
-  ServerState = server_state(),
-  ?assertMatch(#{ is_initialized := true }, ServerState),
   ok.
 
 -spec workspace_buildtargets(config()) -> ok.
@@ -107,29 +99,15 @@ workspace_buildtargets(_Config) ->
   ok.
 
 -spec workspace_reload(config()) -> ok.
-workspace_reload(Config) ->
+workspace_reload(_Config) ->
   rebar3_bsp_util:initialize_server(),
-  sync(Config),
-  ?assertMatch(#{ is_initialized := true }, server_state()),
   {ok, null} = rebar3_bsp_util:client_request('workspace/reload', null),
-  sync(Config),
-  ?assertMatch(#{ is_initialized := true }, server_state()),
-  ok.
-
--spec buildtarget_compile(config()) -> ok.
-buildtarget_compile(_Config) ->
-  rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/compile'
-                                               , targets([<<"profile:default">>, <<"profile:test">>])),
-  ?assertEqual(#{ statusCode => 0 }, Result),
-  ?assert(filelib:is_dir(sample_app_build_dir("test/lib/meck"))),
-  ?assert(filelib:is_dir(sample_app_build_dir("default/lib/sample"))),
   ok.
 
 -spec buildtarget_sources(config()) -> ok.
 buildtarget_sources(_Config) ->
   rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/sources', targets([<<"profile:default">>])),
+  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/sources', targets(["default"])),
   #{ items := [Item] } = Result,
   #{ sources := [Source] } = Item,
   ?assertEqual(?SOURCE_ITEM_KIND_DIR, maps:get(kind, Source)),
@@ -170,12 +148,4 @@ target(Profile, Params) ->
 -spec sample_app_build_dir(string()) -> string().
 sample_app_build_dir(Dir) ->
   filename:join([?SAMPLE_APP_DIR, "_build", Dir]).
-
--spec server_state() -> term().
-server_state() ->
-  sys:get_state(rebar3_bsp_server).
-
--spec client_state() -> term().
-client_state() ->
-  sys:get_state(rebar3_bsp_client).
 

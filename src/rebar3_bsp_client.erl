@@ -29,6 +29,7 @@
         , handle_cast/2
         , handle_info/2
         , handle_continue/2
+        , terminate/2
         ]).
 %%==============================================================================
 %% Includes
@@ -62,7 +63,7 @@
 -type request_id() :: pos_integer().
 -type from()       :: {pid(), any()}.
 -type start_param() :: {root, string()}
-                     | {exec, string(), [string()], [term()]}
+                     | {exec, string(), [term()]}
                      | {port, port() | pid()}.
 
 -type method() :: atom() | binary().
@@ -73,20 +74,17 @@
 -spec start_link(start_param()) -> {ok, pid()}.
 start_link({root, RootPath}) ->
   {ok, Executable, Args} = rebar3_bsp_connection:discover(RootPath),
-  start_link({exec, Executable, Args, [{cd, RootPath}]});
-start_link({exec, Executable, Args, PortSettings}) ->
+  start_link({exec, Executable, [{args, Args}, {cd, RootPath}]});
+start_link({exec, Executable, PortSettings}) ->
   start_link_impl({ open_port
                   , {spawn_executable, Executable}
-                  , PortSettings ++ [{args, Args}, {env, [{"REBAR_COLOR", "none"}]}, use_stdio, binary, exit_status]
+                  , PortSettings ++ [{env, [{"REBAR_COLOR", "none"}]}, use_stdio, binary, exit_status]
                   });
 start_link({port, Port}) ->
   start_link_impl({reuse_port, Port}).
 
 -spec stop() -> ok.
 stop() ->
-  RequestId = send_request('build/shutdown', null),
-  ok = send_notification('build/exit', null),
-  receive_response(RequestId, ?TIMEOUT),
   gen_server:stop(?SERVER).
 
 -spec post_message(map()) -> ok.
@@ -141,6 +139,7 @@ get_notifications() ->
 %%==============================================================================
 -spec init({open_port | reuse_port, any()}) -> {ok, state()}.
 init(PortSpec) ->
+  process_flag(trap_exit, true),
   Port = case PortSpec of
            {open_port, PortName, PortSettings} ->
              erlang:open_port(PortName, PortSettings);
@@ -183,9 +182,10 @@ handle_info({Port, {data, NewData}}, #state{port = Port, buffer = OldBuffer} = S
   { noreply, State#state{ buffer = NewBuffer }, {continue, decode}};
 handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) ->
   {stop, {shutdown, {exit_status, Status}}, State#state{port = undefined}};
-handle_info({'EXIT', Port, normal}, #state{port = Port} = State) ->
-  {stop, normal, State#state{port = undefined}}.
+handle_info({'EXIT', Port, Reason}, #state{port = Port} = State) ->
+  {stop, Reason, State#state{port = undefined}}.
 
+-spec handle_continue(decode, state()) -> {noreply, state()} | {noreply, state(), {continue, decode}}.
 handle_continue(decode, #state{ buffer = Buffer } = State) ->
   case rebar3_bsp_protocol:peel_message(Buffer) of
     {ok, Message, Rest} ->
@@ -196,6 +196,11 @@ handle_continue(decode, #state{ buffer = Buffer } = State) ->
       ?LOG_CRITICAL("Protocol decode error: ~p", [Reason]),
       {noreply, State#state{ buffer = Rest }, {continue, decode}}
   end.
+
+-spec terminate(term(), state()) -> ok.
+terminate(_Reason, #state{ port = Port } = _State) ->
+  ok = terminate_port(Port),
+  ok.
 
 %%==============================================================================
 %% Internal Functions
@@ -224,6 +229,37 @@ handle_message(Message, #state{ requests = Requests
           State#state{ pending = proplists:delete(Id, Pending) }
       end
   end.
+
+terminate_port(undefined) ->
+  ok;
+terminate_port(Port) ->
+  ShutdownRequest = rebar3_bsp_protocol:request(<<"client_terminate">>, <<"build/shutdown">>, null),
+  ExitNotification = rebar3_bsp_protocol:notification(<<"build/exit">>, null),
+  rebar3_bsp_protocol:send_message(Port, ShutdownRequest),
+  rebar3_bsp_protocol:send_message(Port, ExitNotification),
+  receive
+    {'EXIT', Port, Reason} ->
+      ?LOG_INFO("BSP Server exited: ~p", [Reason]);
+    {Port, {exit_status, Status}} ->
+      ?LOG_INFO("BSP Server exited with status ~p", [Status])
+  after 2500 ->
+      force_close(Port)
+  end,
+  ok.
+
+force_close(Port) when is_pid(Port) ->
+  exit(Port, normal),
+  ok;
+force_close(Port) when is_port(Port) ->
+  OsPid = erlang:port_info(Port, os_pid),
+  true = erlang:port_close(Port),
+  case OsPid of
+    undefined ->
+      ok;
+    {os_pid, Pid} ->
+      ?LOG_CRITICAL("BSP Server with OS PID ~p still running", [Pid])
+  end,
+  ok.
 
 -spec effective_params(binary(), map() | null) -> map() | null.
 effective_params(Method, Params) when is_map(Params) ->

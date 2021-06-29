@@ -26,8 +26,15 @@ file(Filename) ->
 -spec dir(file:name_all()) -> binary().
 dir(Dirname) ->
   %% Dirnames must always end with a slash
-  Sanitized = sanitize(Dirname),
-  compose(#{ scheme => ?FILE_SCHEME, path => <<Sanitized/binary, "/">> }).
+  Sanitized = case sanitize(Dirname) of
+                <<"">> ->
+                  <<"">>;
+                <<"/">> ->
+                  <<"/">>;
+                Else ->
+                  <<Else/binary, "/">>
+              end,
+  compose(#{ scheme => ?FILE_SCHEME, path => Sanitized }).
 
 -spec profile(atom() | unicode:chardata()) -> binary().
 profile(Profile) ->
@@ -47,7 +54,13 @@ profile(Profile, Params) ->
 -spec sanitize(file:name_all()) -> binary().
 sanitize(Filename) ->
   Flattened = filename:flatten(Filename),
-  Rejoined = filename:join(filename:split(Flattened)),
+  Parts = filename:split(Flattened),
+  Rejoined = case Parts of
+               [] ->
+                 "";
+               Parts ->
+                 filename:join(Parts)
+             end,
   rebar3_bsp_util:to_binary(Rejoined).
 
 -spec compose(uri_map()) -> binary().
@@ -83,5 +96,5 @@ normalize(Uri, Opts) ->
 
 -spec parse(uri_string()) -> uri_map().
 parse(Uri) ->
-  uri_string:normalize(Uri, [return_map]).
+  normalize(Uri, [return_map]).
 

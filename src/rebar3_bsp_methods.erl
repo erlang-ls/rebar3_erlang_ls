@@ -75,13 +75,13 @@
 -spec ?REQUEST_SPEC('workspace/buildTargets', workspaceBuildTargetsParams(), workspaceBuildTargetsResult()).
 'workspace/buildTargets'(_Params, #{rebar3_state := R3State} = ServerState) ->
   BuildTargets = [#{ id => #{ uri => rebar3_bsp_uri:profile(Profile) }
-                   , tags => [rebar3_profile]
+                   , tags => [<<"rebar3_profile">>]
                    , capabilities => #{ canCompile => true
                                       , canTest => true
                                       , canRun => false
                                       , canDebug => false
                                       }
-                   , languageIds => [erlang]
+                   , languageIds => [<<"erlang">>]
                    , dependencies => []
                    } || Profile <- rebar_state:current_profiles(R3State)],
   {response, #{targets => BuildTargets}, ServerState}.

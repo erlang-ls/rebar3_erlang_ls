@@ -16,6 +16,7 @@
         , buildtarget_sources/1
         , buildtarget_dependencysources/1
         , buildtarget_compile/1
+        , buildtarget_test/1
         ]).
 
 %%==============================================================================
@@ -133,6 +134,13 @@ buildtarget_compile(_Config) ->
   ?assertEqual(#{ statusCode => 0 }, Result),
   ?assert(filelib:is_dir(sample_app_build_dir("test/lib/meck"))),
   ?assert(filelib:is_dir(sample_app_build_dir("default/lib/sample"))),
+  ok.
+
+-spec buildtarget_test(config()) -> ok.
+buildtarget_test(_Config) ->
+  initialize_agent(),
+  {ok, Result} = rebar3_bsp_agent:request('buildTarget/test', targets(["default"])),
+  ?assertMatch(#{ statusCode := 0 }, Result),
   ok.
 
 %%==============================================================================

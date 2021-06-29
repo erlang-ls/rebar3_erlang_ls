@@ -8,6 +8,7 @@
         , 'buildTarget/sources'/2
         , 'buildTarget/dependencySources'/2
         , 'buildTarget/compile'/2
+        , 'buildTarget/test'/2
         ]).
 
 %% notification methods
@@ -76,7 +77,7 @@
   BuildTargets = [#{ id => #{ uri => rebar3_bsp_uri:profile(Profile) }
                    , tags => [rebar3_profile]
                    , capabilities => #{ canCompile => true
-                                      , canTest => false
+                                      , canTest => true
                                       , canRun => false
                                       , canDebug => false
                                       }
@@ -129,6 +130,10 @@
       end,
   NewR3State = lists:foldl(F, R3State, Targets),
   {response, #{ statusCode => 0 }, ServerState#{ rebar3_state => NewR3State }}.
+
+-spec ?REQUEST_SPEC('buildTarget/test', testParams(), testResult()).
+'buildTarget/test'(#{targets := Targets} = _Params, #{rebar3_state := R3State} = ServerState) ->
+  [ target_test(Target, R3State) || Target <- Targets ],
   {response, #{ statusCode => 0 }, ServerState}.
 
 %%==============================================================================
@@ -162,6 +167,16 @@ target_compile(#{ uri := TargetUri }, R3State) ->
     #{ scheme := <<"profile">>, path := Profile } ->
       run([as, Profile, do, "compile"], R3State)
   end.
+
+-spec target_test(buildTargetIdentifier(), rebar3_state:t()) -> {ok, rebar_state:t()} | {{error, term()}, rebar_state:t()}.
+target_test(#{ uri := TargetUri }, R3State) ->
+  case rebar3_bsp_uri:parse(TargetUri) of
+    #{ scheme := <<"profile">>, path := Profile, query := Query } ->
+      Args = [ io_lib:format("~p=~p", [K, V]) || {K,V} <- uri_string:dissect_query(Query) ],
+      StrArgs = [ rebar3_bsp_util:to_string(A) || A <- Args ],
+      run([as, Profile, do, "ct"] ++ StrArgs, R3State);
+    #{ scheme := <<"profile">>, path := Profile } ->
+      run([as, Profile, do, "ct"], R3State)
   end.
 
 -spec run(list(), rebar_state:t()) -> {ok, rebar_state:t()} | {{error, term()}, rebar_state:t()}.

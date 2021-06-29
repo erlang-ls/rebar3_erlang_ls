@@ -2,6 +2,7 @@
 -behaviour(gen_server).
 
 -export([ start_link/1
+        , stop/0
         , post_response/1
         , notify/2
         , request/2
@@ -45,6 +46,10 @@
 start_link(R3State) ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, R3State, []).
 
+-spec stop() -> ok.
+stop() ->
+  gen_server:stop(?SERVER).
+
 -spec post_response(map()) -> ok.
 post_response(Response) ->
   gen_server:cast(?SERVER, {response, Response}).
@@ -76,7 +81,7 @@ check_response(Msg, Id) ->
 %%==============================================================================
 %% gen_server Callbacks
 %%==============================================================================
-
+-spec init(rebar_state:t()) -> {ok, state()}.
 init(R3State) ->
   os:putenv("REBAR_COLOR", "none"),
   application:set_env(rebar, color_intensity, none),
@@ -85,6 +90,7 @@ init(R3State) ->
         , is_shutdown => false
         }}.
 
+-spec handle_call({request, atom(), methodParams()}, term(), state()) -> {reply, term(), state()}.
 handle_call({request, Method, Params}, _From, State) ->
   case try_dispatch(Method, Params, State) of
     {response, Result, NewState} ->
@@ -96,6 +102,8 @@ handle_call({request, Method, Params}, _From, State) ->
       {reply, {error, Error}, NewState}
   end.
 
+-spec handle_cast({notify, atom(), methodParams()}, state()) -> {noreply, state()};
+                 ({exit, term()}, state()) -> {stop, term(), state()}.
 handle_cast({notify, Method, Params}, State) ->
   case try_dispatch(Method, Params, State) of
     {response, Result, NewState} ->
@@ -116,6 +124,10 @@ handle_cast({exit, _ExitCode} = Reason, State) ->
 %%==============================================================================
 %% Internal Functions
 %%==============================================================================
+-spec try_dispatch(atom(), methodParams(), state()) ->
+        {noresponse, state()} |
+        {response, term(), state()} |
+        {error, term(), state()}.
 try_dispatch(Method, Params, State) ->
   try
     case rebar3_bsp_methods:Method(Params, State) of
@@ -136,6 +148,7 @@ try_dispatch(Method, Params, State) ->
       {error, #{ code => Code, message => rebar3_bsp_util:to_binary(Msg) }, State}
   end.
 
+-spec post_exit(pid(), term()) -> ok.
 post_exit(Pid, ExitCode) ->
   gen_server:cast(Pid, {exit, ExitCode}).
 

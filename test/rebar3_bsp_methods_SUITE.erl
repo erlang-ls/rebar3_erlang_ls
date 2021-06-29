@@ -51,7 +51,7 @@ end_per_suite(_Config) ->
 -spec init_per_testcase(atom(), config()) -> config().
 init_per_testcase(TestCase, Config0) ->
   Config1 = rebar3_bsp_test:init_sample_app_testcase(TestCase, Config0),
-  State = rebar3_bsp_util:new_rebar_state_from_file("rebar.config"),
+  State = rebar3:init_config(),
   {ok, LocalConfig} = rebar3_bsp_util:bring_up_local_client_server(State),
   [{local_client_server, LocalConfig} | Config1].
 

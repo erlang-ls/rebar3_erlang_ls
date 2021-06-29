@@ -7,7 +7,6 @@
         , bring_up_local_client_server/1
         , tear_down_local_client_server/1
         , maybe_stop/2
-        , new_rebar_state_from_file/1
         , to_binary/1
         , to_string/1
         , to_atom/1
@@ -65,11 +64,6 @@ maybe_stop(Pid, Name) ->
     _ ->
       ok
   end.
-
--spec new_rebar_state_from_file(file:name()) -> rebar_state:t().
-new_rebar_state_from_file(Filename) ->
-  {ok, RebarConfig} = file:consult(Filename),
-  rebar_state:new(RebarConfig).
 
 -spec to_binary(atom() | binary() | list()) -> binary().
 to_binary(A) when is_atom(A) ->

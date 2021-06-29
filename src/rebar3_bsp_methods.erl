@@ -87,11 +87,10 @@
 
 -spec ?REQUEST_SPEC('workspace/reload', null, null).
 'workspace/reload'(null, #{rebar3_state := R3State} = ServerState) ->
-  {ok, OldDir} = file:get_cwd(),
   BaseDir = rebar_state:dir(R3State),
-  Result = case file:set_cwd(BaseDir) of
-             ok ->
-               rebar3:run(["lock"]);
+  Result = case rebar3_bsp_util:cd(BaseDir) of
+             {ok, _OldDir, BaseDir} ->
+               run(["lock"], R3State);
              Error ->
                Error
            end,
@@ -99,7 +98,6 @@
     {ok, NewR3State} ->
       {response, null, ServerState#{ rebar3_state => NewR3State }};
     {error, Reason} ->
-      file:set_cwd(OldDir), %% What if this fails? Abort?
       Message = io_lib:format("~p", [Reason]),
       {error, #{ code => ?LSP_ERROR_INTERNAL_ERROR, message => Message }, ServerState}
   end.

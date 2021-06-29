@@ -13,6 +13,7 @@
         , map_fread/3
         , lists_intersection/1
         , lists_union/1
+        , cd/1
         ]).
 
 -include_lib("kernel/include/logger.hrl").
@@ -122,4 +123,22 @@ lists_set_operation(Op, [_|_] = Lists) ->
   [H|T] = [ ?SETS:from_list(L) || L <- Lists ],
   Result = lists:foldl(F, H, T),
   ?SETS:to_list(Result).
+
+-spec cd(file:filename() | binary()) ->
+        {ok, file:filename() | undefined, file:filename()} |
+        {error, file:posix() | badarg | no_translation}.
+cd(To) ->
+  From = case file:get_cwd() of
+           {ok, Dir} ->
+             Dir;
+           Error ->
+             ?LOG_ERROR("file:get_cwd/0 => ~p", [Error]),
+             undefined
+         end,
+  case file:set_cwd(To) of
+    ok ->
+      {ok, From, To};
+    {error, Reason} ->
+      {error, Reason}
+  end.
 

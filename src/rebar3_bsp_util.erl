@@ -14,6 +14,7 @@
         , lists_intersection/1
         , lists_union/1
         , cd/1
+        , sample_app_dir/0
         ]).
 
 -include_lib("kernel/include/logger.hrl").
@@ -145,4 +146,11 @@ cd(To) ->
     {error, Reason} ->
       {error, Reason}
   end.
+
+-spec sample_app_dir() -> file:name().
+sample_app_dir() ->
+  PrivDir = code:priv_dir(rebar3_bsp),
+  ResolvedPrivDir = rebar_file_utils:resolve_link(PrivDir),
+  Result = filename:join([ResolvedPrivDir, "sample"]),
+  Result.
 

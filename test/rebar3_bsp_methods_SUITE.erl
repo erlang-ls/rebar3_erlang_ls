@@ -49,17 +49,18 @@ end_per_suite(_Config) ->
   ok.
 
 -spec init_per_testcase(atom(), config()) -> config().
-init_per_testcase(TestCase, Config0) ->
-  Config1 = rebar3_bsp_test:init_sample_app_testcase(TestCase, Config0),
+init_per_testcase(TestCase, Config) ->
+  SampleDir = rebar3_bsp_util:sample_app_dir(),
+  {ok, Cwd, SampleDir} = rebar3_bsp_util:cd(SampleDir),
   State = rebar3:init_config(),
-  {ok, LocalConfig} = rebar3_bsp_util:bring_up_local_client_server(State),
-  [{local_client_server, LocalConfig} | Config1].
+  {ok, _AgentPid} = rebar3_bsp_agent:start_link(State),
+  [{cwd, Cwd} | Config].
 
 -spec end_per_testcase(atom(), config()) -> ok.
 end_per_testcase(TestCase, Config) ->
-  LocalConfig = proplists:get_value(local_client_server, Config),
-  ok = rebar3_bsp_util:tear_down_local_client_server(LocalConfig),
-  ok = rebar3_bsp_test:end_sample_app_testcase(TestCase, Config),
+  OriginalCwd = proplists:get_value(cwd, Config),
+  {ok, _, OriginalCwd} = rebar3_bsp_util:cd(OriginalCwd),
+  ok = rebar3_bsp_agent:stop(),
   ok.
 
 -spec all() -> [atom()].

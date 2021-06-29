@@ -30,7 +30,7 @@
 init_per_suite(Config) ->
   %% Required for the application environment to be loaded
   application:load(rebar3_bsp),
-  rebar3_bsp_connection:generate(rebar3_bsp_test:sample_app_dir()),
+  rebar3_bsp_connection:generate(rebar3_bsp_util:sample_app_dir()),
   Config.
 
 -spec end_per_suite(config()) -> ok.
@@ -38,15 +38,13 @@ end_per_suite(_Config) ->
   ok.
 
 -spec init_per_testcase(atom(), config()) -> config().
-init_per_testcase(TestCase, Config) ->
-  Config1 = rebar3_bsp_test:init_sample_app_testcase(TestCase, Config),
-  {ok, _Pid} = rebar3_bsp_client:start_link({root, rebar3_bsp_test:sample_app_dir()}),
-  Config1.
+init_per_testcase(_TestCase, Config) ->
+  {ok, _Pid} = rebar3_bsp_client:start_link({root, rebar3_bsp_util:sample_app_dir()}),
+  Config.
 
 -spec end_per_testcase(atom(), config()) -> ok.
-end_per_testcase(TestCase, Config) ->
+end_per_testcase(_TestCase, _Config) ->
   ok = rebar3_bsp_client:stop(),
-  ok = rebar3_bsp_test:end_sample_app_testcase(TestCase, Config),
   ok.
 
 -spec all() -> [atom()].

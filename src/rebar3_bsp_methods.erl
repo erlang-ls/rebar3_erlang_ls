@@ -5,9 +5,9 @@
         , 'build/shutdown'/2
         , 'workspace/buildTargets'/2
         , 'workspace/reload'/2
-        , 'buildTarget/compile'/2
         , 'buildTarget/sources'/2
         , 'buildTarget/dependencySources'/2
+        , 'buildTarget/compile'/2
         ]).
 
 %% notification methods

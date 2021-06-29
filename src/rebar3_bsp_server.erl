@@ -20,10 +20,10 @@
 -define(DEFAULT_IO_FDS, "0 1").
 
 -type server_port() :: port() | pid() | undefined.
--type state() :: #{ agent := pid()        % Our agent
-                  , port := server_port() % IO Port
-                  , buffer := binary()    % data buffer
-                  , pending := map()      % Request responses that are pending
+-type state() :: #{ agent := pid() | undefined % Our agent
+                  , port := server_port()      % IO Port
+                  , buffer := binary()         % data buffer
+                  , pending := map()           % Request responses that are pending
                   }.
 
 -spec start_link(rebar_state:t()) -> {ok, pid()}.
@@ -40,8 +40,9 @@ stop() ->
 
 -spec init({rebar_state:t(), server_port()}) -> {ok, state()}.
 init({R3State, Port}) ->
+  process_flag(trap_exit, true),
   {ok, Agent} = rebar3_bsp_agent:start_link(R3State),
-  link(Agent),
+  true = link(Agent),
   {ok, #{ agent => Agent
         , port => make_port(Port)
         , buffer => <<>>
@@ -64,12 +65,16 @@ handle_cast(Request, State) ->
 
 handle_info({Port, {data, NewData}}, #{ port := Port, buffer := OldBuffer } = State) ->
   {noreply, State#{ buffer => <<OldBuffer/binary, NewData/binary>> }, {continue, decode}};
+handle_info({'EXIT', Port, Reason}, #{ port := Port } = State) ->
+  {stop, Reason, State#{ port => undefined }};
+handle_info({'EXIT', Agent, Reason}, #{ agent := Agent } = State) ->
+  {stop, Reason, State#{ agent => undefined }};
 handle_info(Msg, State) ->
   case handle_pending(Msg, State) of
     {ok, NewState} ->
       {noreply, NewState};
     no_reply ->
-      ?LOG_WARNING("Discarding message [message=~p]", [Msg]),
+      ?LOG_CRITICAL("Discarding message [message=~p]", [Msg]),
       {noreply, State}
   end.
 

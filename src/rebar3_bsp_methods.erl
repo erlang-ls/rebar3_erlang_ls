@@ -131,7 +131,9 @@
   {response, #{ statusCode => 0 }, ServerState#{ rebar3_state => NewR3State }}.
   {response, #{ statusCode => 0 }, ServerState}.
 
+%%==============================================================================
 %% Internal Functions
+%%==============================================================================
 
 -spec target_sourceItems(buildTargetIdentifier(), rebar_state:t()) -> [sourceItem()].
 target_sourceItems(#{ uri := TargetUri }, R3State) ->

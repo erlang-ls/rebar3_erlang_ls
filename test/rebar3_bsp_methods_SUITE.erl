@@ -74,7 +74,7 @@ all() ->
 %%==============================================================================
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
-  {ok, Result} = rebar3_bsp_util:client_request('build/initialize', #{}),
+  {ok, Result} = rebar3_bsp_agent:request('build/initialize', client_caps()),
   ?assertMapKeyEqual(rebar3_bsp_connection:version(rebar3_bsp), version, Result),
   ?assertMapKeyEqual(?BSP_VSN, bspVersion, Result),
   ?assertMapKeyEqual(<<"rebar3_bsp">>, displayName, Result),
@@ -88,27 +88,27 @@ build_initialize(_Config) ->
 
 -spec build_initialized(config()) -> ok.
 build_initialized(_Config) ->
-  {ok, _} = rebar3_bsp_util:client_request('build/initialize', #{}),
-  ok = rebar3_bsp_util:client_notify('build/initialized', #{}),
+  {ok, _} = rebar3_bsp_agent:request('build/initialize', client_caps()),
+  ok = rebar3_bsp_agent:notify('build/initialized', #{}),
   ok.
 
 -spec workspace_buildtargets(config()) -> ok.
 workspace_buildtargets(_Config) ->
-  rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('workspace/buildTargets', #{}),
+  initialize_agent(),
+  {ok, Result} = rebar3_bsp_agent:request('workspace/buildTargets', #{}),
   ?assertMatch(#{ targets := [#{ id := #{ uri := <<"profile:default">> } }] }, Result),
   ok.
 
 -spec workspace_reload(config()) -> ok.
 workspace_reload(_Config) ->
-  rebar3_bsp_util:initialize_server(),
-  {ok, null} = rebar3_bsp_util:client_request('workspace/reload', null),
+  initialize_agent(),
+  {ok, null} = rebar3_bsp_agent:request('workspace/reload', null),
   ok.
 
 -spec buildtarget_sources(config()) -> ok.
 buildtarget_sources(_Config) ->
-  rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/sources', targets(["default"])),
+  initialize_agent(),
+  {ok, Result} = rebar3_bsp_agent:request('buildTarget/sources', targets(["default"])),
   #{ items := [Item] } = Result,
   #{ sources := [Source] } = Item,
   ?assertEqual(?SOURCE_ITEM_KIND_DIR, maps:get(kind, Source)),
@@ -118,8 +118,8 @@ buildtarget_sources(_Config) ->
 
 -spec buildtarget_dependencysources(config()) -> ok.
 buildtarget_dependencysources(_Config) ->
-  rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/dependencySources', targets(["default"])),
+  initialize_agent(),
+  {ok, Result} = rebar3_bsp_agent:request('buildTarget/dependencySources', targets(["default"])),
   #{ items := [#{ target := #{ uri := <<"profile:default">> }, sources := Sources }] } = Result,
   [ResultMeckDir] = Sources,
   ?assertEqual(rebar3_bsp_uri:dir(sample_app_build_dir("default/lib/meck")), ResultMeckDir),
@@ -127,8 +127,8 @@ buildtarget_dependencysources(_Config) ->
 
 -spec buildtarget_compile(config()) -> ok.
 buildtarget_compile(_Config) ->
-  rebar3_bsp_util:initialize_server(),
-  {ok, Result} = rebar3_bsp_util:client_request('buildTarget/compile', targets(["default", "test"])),
+  initialize_agent(),
+  {ok, Result} = rebar3_bsp_agent:request('buildTarget/compile', targets(["default", "test"])),
   ?assertEqual(#{ statusCode => 0 }, Result),
   ?assert(filelib:is_dir(sample_app_build_dir("test/lib/meck"))),
   ?assert(filelib:is_dir(sample_app_build_dir("default/lib/sample"))),
@@ -150,3 +150,12 @@ target(Profile, Params) ->
 sample_app_build_dir(Dir) ->
   filename:join([?SAMPLE_APP_DIR, "_build", Dir]).
 
+-spec initialize_agent() -> ok.
+initialize_agent() ->
+  {ok, _Result} = rebar3_bsp_agent:request('build/initialize', client_caps()),
+  ok = rebar3_bsp_agent:notify('build/initialized', #{}),
+  ok.
+
+-spec client_caps() -> map().
+client_caps() ->
+  #{ capabilities => #{ languageIds => [<<"erlang">>] } }.

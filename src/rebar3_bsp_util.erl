@@ -22,16 +22,16 @@
 -define(TIMEOUT, 5000).
 -define(SETS, sets).
 
--spec client_request(binary() | atom(), map()) -> any().
+-spec client_request(string() | binary() | atom(), map() | null) -> any().
 client_request(Method, Params) ->
   client_request(Method, Params, ?TIMEOUT).
 
--spec client_request(binary() | atom(), map(), timeout()) -> any().
+-spec client_request(string() | binary() | atom(), map() | null, timeout()) -> any().
 client_request(Method, Params, Timeout) ->
   RequestId = rebar3_bsp_client:send_request(Method, Params),
   rebar3_bsp_client:receive_response(RequestId, Timeout).
 
--spec client_notify(binary() | atom(), map()) -> ok.
+-spec client_notify(string() | binary() | atom(), map() | null) -> ok.
 client_notify(Method, Params) ->
   ok = rebar3_bsp_client:send_notification(Method, Params),
   ok.

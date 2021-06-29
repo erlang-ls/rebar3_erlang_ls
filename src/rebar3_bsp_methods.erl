@@ -59,11 +59,11 @@
   {noresponse, ServerState#{is_initialized => true, rebar3_state => NewR3State}}.
 
 -spec ?REQUEST_SPEC('build/shutdown', null, null).
-'build/shutdown'(null, ServerState) ->
+'build/shutdown'(_Params, ServerState) ->
   {response, null, ServerState#{is_shutdown => true}}.
 
 -spec ?NOTIFICATION_SPEC('build/exit', null).
-'build/exit'(null, #{is_shutdown := IsShutdown} = ServerState) ->
+'build/exit'(_Params, #{is_shutdown := IsShutdown} = ServerState) ->
   case IsShutdown of
     true ->
       {exit, 0, ServerState};
@@ -86,7 +86,7 @@
   {response, #{targets => BuildTargets}, ServerState}.
 
 -spec ?REQUEST_SPEC('workspace/reload', null, null).
-'workspace/reload'(null, #{rebar3_state := R3State} = ServerState) ->
+'workspace/reload'(_Params, #{rebar3_state := R3State} = ServerState) ->
   BaseDir = rebar_state:dir(R3State),
   Result = case rebar3_bsp_util:cd(BaseDir) of
              {ok, _OldDir, BaseDir} ->

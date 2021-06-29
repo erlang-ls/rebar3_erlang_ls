@@ -30,6 +30,7 @@
 init_per_suite(Config) ->
   %% Required for the application environment to be loaded
   application:load(rebar3_bsp),
+  ok = rebar3_bsp_util:clean_sample_app_dir(),
   rebar3_bsp_connection:generate(rebar3_bsp_util:sample_app_dir()),
   Config.
 

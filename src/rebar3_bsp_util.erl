@@ -15,9 +15,11 @@
         , lists_union/1
         , cd/1
         , sample_app_dir/0
+        , clean_sample_app_dir/0
         ]).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -define(TIMEOUT, 5000).
 -define(SETS, sets).
@@ -153,4 +155,23 @@ sample_app_dir() ->
   ResolvedPrivDir = rebar_file_utils:resolve_link(PrivDir),
   Result = filename:join([ResolvedPrivDir, "sample"]),
   Result.
+
+-spec clean_sample_app_dir() -> ok.
+clean_sample_app_dir() ->
+  SAD = sample_app_dir(),
+  Targets = [ filename:join([SAD, D]) || D <- [".bsp", "_build", "rebar.lock"] ],
+  F = fun(Target) ->
+          case file:read_file_info(Target) of
+            {ok, #file_info{ type = directory }} ->
+              ok = file:del_dir_r(Target);
+            {ok, #file_info{ type = regular }} ->
+              ok = file:delete(Target);
+            {ok, #file_info{ type = Type }} ->
+              ?LOG_CRITICAL("don't know how handle file type ~p: ~p", [Type, Target]);
+            {error, Reason} ->
+              ?LOG_CRITICAL("can't clean out ~p: ~p", [Target, file:format_error(Reason)])
+          end
+      end,
+  ok = lists:foreach(F, Targets),
+  ok.
 

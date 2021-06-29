@@ -42,6 +42,7 @@
 -spec init_per_suite(config()) -> config().
 init_per_suite(Config) ->
   application:load(rebar3_bsp),
+  ok = rebar3_bsp_util:clean_sample_app_dir(),
   Config.
 
 -spec end_per_suite(config()) -> ok.
@@ -49,7 +50,7 @@ end_per_suite(_Config) ->
   ok.
 
 -spec init_per_testcase(atom(), config()) -> config().
-init_per_testcase(TestCase, Config) ->
+init_per_testcase(_TestCase, Config) ->
   SampleDir = rebar3_bsp_util:sample_app_dir(),
   {ok, Cwd, SampleDir} = rebar3_bsp_util:cd(SampleDir),
   State = rebar3:init_config(),
@@ -57,10 +58,10 @@ init_per_testcase(TestCase, Config) ->
   [{cwd, Cwd} | Config].
 
 -spec end_per_testcase(atom(), config()) -> ok.
-end_per_testcase(TestCase, Config) ->
+end_per_testcase(_TestCase, Config) ->
   OriginalCwd = proplists:get_value(cwd, Config),
-  {ok, _, OriginalCwd} = rebar3_bsp_util:cd(OriginalCwd),
   ok = rebar3_bsp_agent:stop(),
+  {ok, _, OriginalCwd} = rebar3_bsp_util:cd(OriginalCwd),
   ok.
 
 -spec all() -> [atom()].

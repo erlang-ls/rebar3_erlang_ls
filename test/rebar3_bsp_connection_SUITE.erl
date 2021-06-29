@@ -29,12 +29,12 @@
 %%==============================================================================
 -spec init_per_suite(config()) -> config().
 init_per_suite(Config) ->
-  {ok, Started} = application:ensure_all_started(rebar3_bsp),
-  [{started, Started} | Config].
+  application:load(rebar3_bsp),
+  ok = rebar3_bsp_util:clean_sample_app_dir(),
+  Config.
 
 -spec end_per_suite(config()) -> ok.
-end_per_suite(Config) ->
-  [application:stop(App) || App <- ?config(started, Config)],
+end_per_suite(_Config) ->
   ok.
 
 -spec init_per_testcase(atom(), config()) -> config().

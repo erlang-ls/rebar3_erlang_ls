@@ -164,20 +164,6 @@
                         }.
 -type workspaceBuildTargetsResult() :: #{ targets => [buildTarget()]}.
 
-%% buildTarget/compile
--type compileParams() :: #{ targets := [buildTargetIdentifier()]
-                          , originId => binary()
-                          , arguments => [binary()]
-                          }.
--type compileResult() :: #{ originId => binary()
-                          , statusCode := integer()
-                            %% The spec indicates that dataKind is required, but a comment says
-                            %% "If this field is not set, the kind of data is not specified",
-                            %% so it seems it is actually optional
-                          , dataKind => binary()
-                          , data => any()
-                          }.
-
 %% buildTarget/sources
 -type buildTargetSourcesParams() :: #{ targets := [buildTargetIdentifier()] }.
 -type sourceItemKind() :: ?SOURCE_ITEM_KIND_FILE
@@ -198,3 +184,32 @@
                                   , sources := [uri()]
                                   }.
 -type dependencySourcesResult() :: #{ items := [dependencySourcesItem()] }.
+
+%% buildTarget/compile
+-type compileParams() :: #{ targets := [buildTargetIdentifier()]
+                          , originId => binary()
+                          , arguments => [binary()]
+                          }.
+-type compileResult() :: #{ originId => binary()
+                          , statusCode := integer()
+                            %% The spec indicates that dataKind is required, but a comment says
+                            %% "If this field is not set, the kind of data is not specified",
+                            %% so it seems it is actually optional
+                          , dataKind => binary()
+                          , data => any()
+                          }.
+
+
+%% buildTarget/test
+-type testParams() :: #{ targets := [buildTargetIdentifier()]
+                       , originId => binary()
+                       , arguments => [binary()]
+                       , dataKind => binary()
+                       , data => any()
+                       }.
+-type testResult() :: #{ originId => binary()
+                       , statusCode => integer()
+                       , dataKind => binary()
+                       , data => any()
+                       }.
+

@@ -118,12 +118,22 @@
 
 -spec ?REQUEST_SPEC('buildTarget/compile', compileParams(), compileResult()).
 'buildTarget/compile'(#{targets := Targets}, #{rebar3_state := R3State} = ServerState) ->
-  [ {ok, _NewR3State} = target_compile(Target, R3State) || Target <- Targets ],
+  F = fun(Target, AccR3State) ->
+          case target_compile(Target, AccR3State) of
+            {ok, NewR3State} ->
+              NewR3State;
+            Err ->
+              ?LOG_CRITICAL("Error compiling ~p: ~p", [Target, Err]),
+              AccR3State
+          end
+      end,
+  NewR3State = lists:foldl(F, R3State, Targets),
+  {response, #{ statusCode => 0 }, ServerState#{ rebar3_state => NewR3State }}.
   {response, #{ statusCode => 0 }, ServerState}.
 
 %% Internal Functions
 
--spec target_sourceItems(buildTargetIdentifier(), rebar3_state:t()) -> [sourceItem()].
+-spec target_sourceItems(buildTargetIdentifier(), rebar_state:t()) -> [sourceItem()].
 target_sourceItems(#{ uri := TargetUri }, R3State) ->
   case rebar3_bsp_uri:parse(TargetUri) of
     #{ scheme := <<"profile">>, path := Profile } ->
@@ -135,7 +145,7 @@ target_sourceItems(#{ uri := TargetUri }, R3State) ->
          } || App <- ProfileApps ]
   end.
 
--spec target_dependencySources(buildTargetIdentifier(), rebar3_state:t()) -> [uri()].
+-spec target_dependencySources(buildTargetIdentifier(), rebar_state:t()) -> [uri()].
 target_dependencySources(#{ uri := TargetUri }, R3State) ->
   case rebar3_bsp_uri:parse(TargetUri) of
     #{ scheme := <<"profile">>, path := Profile } ->
@@ -144,14 +154,49 @@ target_dependencySources(#{ uri := TargetUri }, R3State) ->
       [ rebar3_bsp_uri:dir(rebar_app_info:dir(App)) || App <- ProfileDeps ]
   end.
 
--spec target_compile(buildTargetIdentifier(), rebar3_state:t()) -> {ok, rebar3_state:t()}.
+-spec target_compile(buildTargetIdentifier(), rebar3_state:t()) -> {ok, rebar_state:t()} | {{error, term()}, rebar_state:t()}.
 target_compile(#{ uri := TargetUri }, R3State) ->
   case rebar3_bsp_uri:parse(TargetUri) of
     #{ scheme := <<"profile">>, path := Profile } ->
-      {ok, NewState} = rebar3:run(R3State, ["as", binary_to_list(Profile), "compile"]),
-      {ok, NewState}
+      run([as, Profile, do, "compile"], R3State)
+  end.
   end.
 
+-spec run(list(), rebar_state:t()) -> {ok, rebar_state:t()} | {{error, term()}, rebar_state:t()}.
+run(RawArgs, R3State) ->
+  OldCodePath = code:get_path(),
+  {Status, NewR3State} = try
+                           Args = [rebar3_bsp_util:to_string(A) || A <- RawArgs],
+                           CmdState0 = refresh_state(R3State),
+                           CmdState = rebar_state:set(CmdState0, caller, api),
+                           case rebar3:run(R3State, Args) of
+                             {ok, TmpState} ->
+                               {ok, TmpState};
+                             {error, Err} when is_list(Err) ->
+                               {{error, lists:flatten(Err)}, CmdState};
+                             {error, Err} ->
+                               {{error, Err}, CmdState}
+                           end
+                         catch
+                           T:R:S ->
+                             ?LOG_CRITICAL("BSP Stacktrace: ~p", [S]),
+                             {{error, {T, R}}, R3State}
+                         end,
+  %% Unfortunately rebar3 messes with the code paths when running commands
+  %% via rebar3:run/2 - it unsets deps and plugins paths. There is API to
+  %% set these in rebar_paths:set_paths/2, but unfortunately it seems to
+  %% be buggy - in the BSP unit tests we end up deeply nested like so:
+  %% /Users/louai/github/al-khanji/rebar3_bsp/priv/sample/_build/default/plugins/rebar3_bsp/priv/sample/_build/default/plugins/rebar3_bsp/priv/sample/_build/default/plugins/rebar3_bsp/priv/sample/_build/default/plugins/rebar3_bsp/priv/sample/_build/default/plugins/rebar3_bsp/priv/sample/_build/default/plugins/rebar3_bsp/priv/sample
+  %% To work around this for now we save the old code path above and simply
+  %% add every entry again here *to the end of the path*.
+  [ code:add_path(P) || P <- OldCodePath ],
+  {Status, NewR3State}.
+
+-spec refresh_state(rebar_state:t()) -> rebar_state:t().
+refresh_state(R3State) ->
+  InitConfig = rebar3:init_config(),
+  rebar_state:apply_profiles(InitConfig,
+                             rebar_state:current_profiles(R3State)).
 -spec apps_with_profile(atom(), [rebar_app_info:t()]) -> [rebar_app_info:t()].
 apps_with_profile(Profile, Apps) ->
   [ App || App <- Apps, lists:member(Profile, rebar_app_info:profiles(App)) ].

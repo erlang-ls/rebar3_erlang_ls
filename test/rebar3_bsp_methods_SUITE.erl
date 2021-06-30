@@ -17,6 +17,7 @@
         , buildtarget_dependencysources/1
         , buildtarget_compile/1
         , buildtarget_test/1
+        , rebar3_run/1
         ]).
 
 %%==============================================================================
@@ -141,6 +142,13 @@ buildtarget_test(_Config) ->
   initialize_agent(),
   {ok, Result} = rebar3_bsp_agent:request('buildTarget/test', targets(["default"])),
   ?assertMatch(#{ statusCode := 0 }, Result),
+  ok.
+
+-spec rebar3_run(config()) -> ok.
+rebar3_run(_Config) ->
+  initialize_agent(),
+  ?assertEqual({ok, #{}}, rebar3_bsp_agent:request('rebar3/run', #{ args => ["version"] })),
+  ?assertMatch({error, #{}}, rebar3_bsp_agent:request('rebar3/run', #{ args => ["bogus"] })),
   ok.
 
 %%==============================================================================

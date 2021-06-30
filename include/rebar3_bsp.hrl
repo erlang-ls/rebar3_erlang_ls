@@ -213,3 +213,7 @@
                        , data => any()
                        }.
 
+%% rebar3/run
+-type rebar3RunParams() :: #{ args := [binary()] }.
+-type rebar3RunResult() :: #{}.
+

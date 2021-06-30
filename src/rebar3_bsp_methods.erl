@@ -9,6 +9,7 @@
         , 'buildTarget/dependencySources'/2
         , 'buildTarget/compile'/2
         , 'buildTarget/test'/2
+        , 'rebar3/run'/2
         ]).
 
 %% notification methods
@@ -135,6 +136,16 @@
 'buildTarget/test'(#{targets := Targets} = _Params, #{rebar3_state := R3State} = ServerState) ->
   [ target_test(Target, R3State) || Target <- Targets ],
   {response, #{ statusCode => 0 }, ServerState}.
+
+-spec ?REQUEST_SPEC('rebar3/run', rebar3RunParams(), rebar3RunResult()).
+'rebar3/run'(#{ args := Args }, #{ rebar3_state := R3State } = ServerState) ->
+  case run(Args, R3State) of
+    {ok, NewR3State} ->
+      {response, #{}, ServerState#{ rebar3_state => NewR3State }};
+    {{error, Reason}, _NewR3State} ->
+      Message = io_lib:format("~p", [Reason]),
+      {error, #{ code => ?LSP_ERROR_INTERNAL_ERROR, message => Message }, ServerState}
+  end.
 
 %%==============================================================================
 %% Internal Functions

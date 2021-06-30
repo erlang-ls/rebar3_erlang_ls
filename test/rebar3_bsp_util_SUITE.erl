@@ -1,5 +1,4 @@
 -module(rebar3_bsp_util_SUITE).
--behaviour(ct_suite).
 
 -export([all/0]).
 

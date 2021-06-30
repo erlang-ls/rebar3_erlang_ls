@@ -1,5 +1,4 @@
 -module(rebar3_bsp_protocol_SUITE).
--behaviour(ct_suite).
 
 %% CT Callbacks
 -export([ all/0

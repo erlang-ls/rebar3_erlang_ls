@@ -59,7 +59,8 @@ all() ->
 %%==============================================================================
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
-  {ok, Result} = rebar3_bsp_client:request('build/initialize', #{}),
+  RequestId = rebar3_bsp_client:send_request('build/initialize', #{}),
+  {ok, Result} = rebar3_bsp_client:receive_response(RequestId, 60 * 1000),
   ?assertMatch(#{ bspVersion := <<"2.0.0">>
                 , displayName := <<"rebar3_bsp">>
                 , version := <<"0.1.0">>

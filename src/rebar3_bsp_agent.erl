@@ -64,19 +64,19 @@ request(Method, Params) ->
 
 -spec post_request(methodName(), methodParams()) -> pendingRequest().
 post_request(Method, Params) ->
-  gen_server:send_request(?SERVER, {request, rebar3_bsp_util:to_atom(Method), Params}).
+  ?GEN_SERVER_SEND_REQUEST(?SERVER, {request, rebar3_bsp_util:to_atom(Method), Params}).
 
 -spec receive_response(pendingRequest(), timeout()) -> {reply, term()} | timeout | {error, {term(), term()}}.
 receive_response(Id, Timeout) ->
-  gen_server:receive_response(Id, Timeout).
+  ?GEN_SERVER_RECEIVE_RESPONSE(Id, Timeout).
 
 -spec wait_response(pendingRequest(), timeout()) -> {reply, term()} | timeout | {error, {term(), term()}}.
 wait_response(Id, Timeout) ->
-  gen_server:wait_response(Id, Timeout).
+  ?GEN_SERVER_WAIT_RESPONSE(Id, Timeout).
 
 -spec check_response(term(), pendingRequest()) -> {reply, term()} | no_reply | {error, {term(), term()}}.
 check_response(Msg, Id) ->
-  gen_server:check_response(Msg, Id).
+  ?GEN_SERVER_CHECK_RESPONSE(Msg, Id).
 
 %%==============================================================================
 %% gen_server Callbacks

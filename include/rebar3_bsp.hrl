@@ -15,6 +15,22 @@
 -define(SOURCE_ITEM_KIND_FILE, 1).
 -define(SOURCE_ITEM_KIND_DIR, 2).
 
+-if(?OTP_RELEASE > 23).
+-define(HAVE_GEN_SERVER_SEND_REQUEST, true).
+-endif.
+
+-ifdef(HAVE_GEN_SERVER_SEND_REQUEST).
+-define(GEN_SERVER_SEND_REQUEST, gen_server:send_request).
+-define(GEN_SERVER_WAIT_RESPONSE, gen_server:wait_response).
+-define(GEN_SERVER_CHECK_RESPONSE, gen_server:check_response).
+-define(GEN_SERVER_RECEIVE_RESPONSE, gen_server:receive_response).
+-else.
+-define(GEN_SERVER_SEND_REQUEST, rebar3_bsp_gen_server:send_request).
+-define(GEN_SERVER_WAIT_RESPONSE, rebar3_bsp_gen_server:wait_response).
+-define(GEN_SERVER_CHECK_RESPONSE, rebar3_bsp_gen_server:check_response).
+-define(GEN_SERVER_RECEIVE_RESPONSE, rebar3_bsp_gen_server:receive_response).
+-endif.
+
 %%==============================================================================
 %% Error codes from LSP Specification
 %%==============================================================================

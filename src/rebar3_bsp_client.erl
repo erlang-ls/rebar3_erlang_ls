@@ -16,13 +16,13 @@
         , stop/0
         , post_message/1
         , request/2
+        , send_notification/2
+        , get_requests/0
+        , get_notifications/0
         , send_request/2
         , receive_response/2
         , check_response/2
         , wait_response/2
-        , send_notification/2
-        , get_requests/0
-        , get_notifications/0
         ]).
 
 -export([ init/1
@@ -97,37 +97,6 @@ request(Method, Params) ->
   Response = gen_server:call(?SERVER, {send_request, rebar3_bsp_util:to_binary(Method), Params}),
   unpeel_response(Response).
 
--spec send_request(method(), params()) -> any().
-send_request(Method, Params) ->
-  gen_server:send_request(?SERVER, {send_request, rebar3_bsp_util:to_binary(Method), Params}).
-
--spec receive_response(any(), timeout()) -> {ok, responseResult()} | {error, responseError()} | timeout.
-receive_response(RequestId, Timeout) ->
-  case gen_server:receive_response(RequestId, Timeout) of
-    {reply, Response} ->
-      unpeel_response(Response);
-    timeout ->
-      timeout
-  end.
-
--spec check_response(any(), any()) -> {ok, responseResult()} | {error, responseError()} | no_reply.
-check_response(Msg, RequestId) ->
-  case gen_server:check_response(Msg, RequestId) of
-    {reply, Response} ->
-      unpeel_response(Response);
-    no_reply ->
-      no_reply
-  end.
-
--spec wait_response(any(), timeout()) -> {ok, responseResult()} | {error, responseError()} | timeout.
-wait_response(RequestId, Timeout) ->
-  case gen_server:wait_response(RequestId, Timeout) of
-    {reply, Response} ->
-      unpeel_response(Response);
-    timeout ->
-      timeout
-  end.
-
 -spec send_notification(method(), params()) -> ok.
 send_notification(Method, Params) ->
   gen_server:cast(?SERVER, {send_notification, rebar3_bsp_util:to_binary(Method), Params}).
@@ -139,6 +108,37 @@ get_requests() ->
 -spec get_notifications() -> [notificationMessage()].
 get_notifications() ->
   gen_server:call(?SERVER, get_notifications).
+
+-spec send_request(method(), params()) -> any().
+send_request(Method, Params) ->
+  ?GEN_SERVER_SEND_REQUEST(?SERVER, {send_request, rebar3_bsp_util:to_binary(Method), Params}).
+
+-spec receive_response(any(), timeout()) -> {ok, responseResult()} | {error, responseError()} | timeout.
+receive_response(RequestId, Timeout) ->
+  case ?GEN_SERVER_RECEIVE_RESPONSE(RequestId, Timeout) of
+    {reply, Response} ->
+      unpeel_response(Response);
+    timeout ->
+      timeout
+  end.
+
+-spec check_response(any(), any()) -> {ok, responseResult()} | {error, responseError()} | no_reply.
+check_response(Msg, RequestId) ->
+  case ?GEN_SERVER_CHECK_RESPONSE(Msg, RequestId) of
+    {reply, Response} ->
+      unpeel_response(Response);
+    no_reply ->
+      no_reply
+  end.
+
+-spec wait_response(any(), timeout()) -> {ok, responseResult()} | {error, responseError()} | timeout.
+wait_response(RequestId, Timeout) ->
+  case ?GEN_SERVER_WAIT_RESPONSE(RequestId, Timeout) of
+    {reply, Response} ->
+      unpeel_response(Response);
+    timeout ->
+      timeout
+  end.
 
 %%==============================================================================
 %% gen_server callbacks

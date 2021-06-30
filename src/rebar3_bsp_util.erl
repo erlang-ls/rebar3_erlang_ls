@@ -155,7 +155,7 @@ clean_sample_app_dir() ->
   F = fun(Target) ->
           case file:read_file_info(Target) of
             {ok, #file_info{ type = directory }} ->
-              ok = file:del_dir_r(Target);
+              ok = rebar_file_utils:rm_rf(Target);
             {ok, #file_info{ type = regular }} ->
               ok = file:delete(Target);
             {ok, #file_info{ type = Type }} ->

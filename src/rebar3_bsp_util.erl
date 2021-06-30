@@ -160,6 +160,8 @@ clean_sample_app_dir() ->
               ok = file:delete(Target);
             {ok, #file_info{ type = Type }} ->
               ?LOG_CRITICAL("don't know how handle file type ~p: ~p", [Type, Target]);
+            {error, enoent} ->
+              ok;
             {error, Reason} ->
               ?LOG_CRITICAL("can't clean out ~p: ~p", [Target, file:format_error(Reason)])
           end

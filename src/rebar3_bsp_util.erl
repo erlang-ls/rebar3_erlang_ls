@@ -1,10 +1,6 @@
 -module(rebar3_bsp_util).
 
--export([ client_request/2
-        , client_request/3
-        , client_notify/2
-        , initialize_server/0
-        , bring_up_local_client_server/1
+-export([ bring_up_local_client_server/1
         , tear_down_local_client_server/1
         , maybe_stop/2
         , to_binary/1
@@ -21,28 +17,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("kernel/include/file.hrl").
 
--define(TIMEOUT, 5000).
 -define(SETS, sets).
-
--spec client_request(string() | binary() | atom(), map() | null) -> any().
-client_request(Method, Params) ->
-  client_request(Method, Params, ?TIMEOUT).
-
--spec client_request(string() | binary() | atom(), map() | null, timeout()) -> any().
-client_request(Method, Params, Timeout) ->
-  RequestId = rebar3_bsp_client:send_request(Method, Params),
-  rebar3_bsp_client:receive_response(RequestId, Timeout).
-
--spec client_notify(string() | binary() | atom(), map() | null) -> ok.
-client_notify(Method, Params) ->
-  ok = rebar3_bsp_client:send_notification(Method, Params),
-  ok.
-
--spec initialize_server() -> ok.
-initialize_server() ->
-  {ok, _Result} = client_request('build/initialize', #{}),
-  ok = client_notify('build/initialized', #{}),
-  ok.
 
 -spec bring_up_local_client_server(rebar_state:t()) -> {ok, {pid(), pid(), pid()}}.
 bring_up_local_client_server(R3State) ->

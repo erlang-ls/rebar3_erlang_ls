@@ -15,6 +15,7 @@
 -export([ start_link/1
         , stop/0
         , post_message/1
+        , request/2
         , send_request/2
         , receive_response/2
         , check_response/2
@@ -90,6 +91,11 @@ stop() ->
 -spec post_message(map()) -> ok.
 post_message(Message) ->
   gen_server:cast(?SERVER, {incoming_message, Message}).
+
+-spec request(method(), params()) -> {ok, responseResult()} | {error, responseError()}.
+request(Method, Params) ->
+  Response = gen_server:call(?SERVER, {send_request, rebar3_bsp_util:to_binary(Method), Params}),
+  unpeel_response(Response).
 
 -spec send_request(method(), params()) -> any().
 send_request(Method, Params) ->

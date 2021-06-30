@@ -3,16 +3,6 @@
 
 -export([all/0]).
 
-%% TODO
-%% -export([ client_request/1
-%%         , client_notify/1
-%%         , initialize_server/1
-%%         , bring_up_local_client_server/1
-%%         , tear_down_local_client_server/1
-%%         , maybe_stop/1
-%%         , new_rebar_state_from_file/1
-%%         ]).
-
 -export([ to_binary/1
         , to_string/1
         , map_fread/1
@@ -26,48 +16,12 @@
 -type config() :: [{atom(), any()}].
 
 all() ->
-   %% [ client_request
-   %% , client_notify
-   %% , initialize_server
-   %% , bring_up_local_client_server
-   %% , tear_down_local_client_server
-   %% , maybe_stop
-   %% , new_rebar_state_from_file
-   %% ] ++
    [ to_binary
    , to_string
    , map_fread
    , lists_intersection
    , lists_union
    ].
-
-%% -spec client_request(config()) -> ok.
-%% client_request(_Config) ->
-%%   ok.
-
-%% -spec client_notify(config()) -> ok.
-%% client_notify(_Config) ->
-%%   ok.
-
-%% -spec initialize_server(config()) -> ok.
-%% initialize_server(_Config) ->
-%%   ok.
-
-%% -spec bring_up_local_client_server(config()) -> ok.
-%% bring_up_local_client_server(_Config) ->
-%%   ok.
-
-%% -spec tear_down_local_client_server(config()) -> ok.
-%% tear_down_local_client_server(_Config) ->
-%%   ok.
-
-%% -spec maybe_stop(config()) -> ok.
-%% maybe_stop(_Config) ->
-%%   ok.
-
-%% -spec new_rebar_state_from_file(config()) -> ok.
-%% new_rebar_state_from_file(_Config) ->
-%%   ok.
 
 -spec to_binary(config()) -> ok.
 to_binary(_Config) ->

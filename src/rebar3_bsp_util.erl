@@ -43,34 +43,51 @@ maybe_stop(Pid, Name) ->
       ok
   end.
 
--spec to_binary(atom() | binary() | list()) -> binary().
+-spec to_atom(atom() | binary() | list()) -> atom().
+to_atom(A) when is_atom(A) ->
+  A;
+to_atom(B) when is_binary(B) ->
+  erlang:binary_to_atom(B, utf8);
+to_atom(L) when is_list(L) ->
+  erlang:list_to_atom(L);
+to_atom(X) ->
+  error(badarg, [X]).
+
+-spec to_binary(atom() | binary() | list() | integer()) -> binary().
 to_binary(A) when is_atom(A) ->
-  atom_to_binary(A);
+  erlang:atom_to_binary(A, utf8);
 to_binary(B) when is_binary(B) ->
   B;
 to_binary(L) when is_list(L) ->
-  list_to_binary(L);
+  case unicode:characters_to_binary(L) of
+    Binary when is_binary(Binary) ->
+      Binary;
+    _ ->
+      erlang:list_to_binary(L)
+  end;
+to_binary(I) when is_integer(I) ->
+  erlang:integer_to_binary(I);
 to_binary(X) ->
   error(badarg, [X]).
 
 -spec to_string(atom() | binary() | list()) -> string().
 to_string(A) when is_atom(A) ->
-  atom_to_list(A);
+  to_string(erlang:atom_to_list(A));
 to_string(B) when is_binary(B) ->
-  binary_to_list(B);
+  case unicode:characters_to_list(B) of
+    List when is_list(List) ->
+      List;
+    _ ->
+      erlang:binary_to_list(B) 
+  end;
 to_string(L) when is_list(L) ->
-  L;
+  case unicode:characters_to_list(L) of
+    List when is_list(List) ->
+      List;
+    _ ->
+      L 
+  end;
 to_string(X) ->
-  error(badarg, [X]).
-
--spec to_atom(atom() | binary() | list()) -> atom().
-to_atom(A) when is_atom(A) ->
-  A;
-to_atom(B) when is_binary(B) ->
-  binary_to_atom(B);
-to_atom(L) when is_list(L) ->
-  list_to_atom(L);
-to_atom(X) ->
   error(badarg, [X]).
 
 -spec map_fread(term(), map(), string()) -> {ok, [io_lib:fread_item()], string()} | {error, term()}.

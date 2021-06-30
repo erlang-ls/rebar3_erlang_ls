@@ -189,7 +189,7 @@ peel_headers(Buffer, Headers) ->
 %%==============================================================================
 -spec content(binary()) -> binary().
 content(Body) ->
-  unicode:characters_to_binary([headers(Body), "\r\n", Body]).
+  rebar3_bsp_util:to_binary([headers(Body), "\r\n", Body]).
 
 -spec headers(binary()) -> iolist().
 headers(Body) ->

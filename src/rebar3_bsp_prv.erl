@@ -78,12 +78,12 @@ setup_name(State) ->
   {_Long, Short, Opts} = rebar_dist_utils:find_options(State),
   Name = case Short of
            undefined ->
-             list_to_atom(filename:basename(rebar_state:dir(State)));
+             rebar3_bsp_util:to_atom(filename:basename(rebar_state:dir(State)));
            N ->
              N
          end,
   Int = erlang:phash2(erlang:timestamp()),
   Id = lists:flatten(io_lib:format("~s_~p_~p", [?NAME_PREFIX, Name, Int])),
-  rebar_dist_utils:short(list_to_atom(Id), Opts),
+  rebar_dist_utils:short(rebar3_bsp_util:to_atom(Id), Opts),
   ok.
 

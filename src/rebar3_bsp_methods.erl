@@ -156,7 +156,7 @@ target_sourceItems(#{ uri := TargetUri }, R3State) ->
   case rebar3_bsp_uri:parse(TargetUri) of
     #{ scheme := <<"profile">>, path := Profile } ->
       ProjectApps = rebar_state:project_apps(R3State),
-      ProfileApps = apps_with_profile(binary_to_atom(Profile), ProjectApps),
+      ProfileApps = apps_with_profile(rebar3_bsp_util:to_atom(Profile), ProjectApps),
       [ #{ uri => rebar3_bsp_uri:dir(rebar_app_info:dir(App))
          , kind => ?SOURCE_ITEM_KIND_DIR
          , generated => false
@@ -168,7 +168,7 @@ target_dependencySources(#{ uri := TargetUri }, R3State) ->
   case rebar3_bsp_uri:parse(TargetUri) of
     #{ scheme := <<"profile">>, path := Profile } ->
       AllDeps = rebar_state:all_deps(R3State),
-      ProfileDeps = apps_with_profile(binary_to_atom(Profile), AllDeps),
+      ProfileDeps = apps_with_profile(rebar3_bsp_util:to_atom(Profile), AllDeps),
       [ rebar3_bsp_uri:dir(rebar_app_info:dir(App)) || App <- ProfileDeps ]
   end.
 

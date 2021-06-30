@@ -47,7 +47,7 @@ discover(BaseDir) ->
   [C|_] = filelib:wildcard(filename:join([BaseDir, ".bsp", "*.json"])),
   {ok, Content} = file:read_file(C),
   #{ argv := Argv } = jsx:decode(Content, [return_maps, {labels, atom}]),
-  [Cmd|Params] = [binary_to_list(X) || X <- Argv],
+  [Cmd|Params] = [rebar3_bsp_util:to_string(X) || X <- Argv],
   E = os:find_executable(Cmd),
   {ok, E, Params}.
 
@@ -57,7 +57,7 @@ discover(BaseDir) ->
 -spec details() -> details().
 details() ->
   LauncherPath = filename:join([code:priv_dir(?BSP_APPLICATION), ?BSP_LAUNCHER]),
-  Launcher = list_to_binary(LauncherPath),
+  Launcher = rebar3_bsp_util:to_binary(LauncherPath),
   #{ name       => ?NAME
    , version    => version(?BSP_APPLICATION)
    , bspVersion => ?BSP_VSN
@@ -73,4 +73,4 @@ filepath(BaseDir) ->
 -spec version(atom()) -> binary().
 version(Application) ->
   {ok, Vsn} = application:get_key(Application, vsn),
-  list_to_binary(Vsn).
+  rebar3_bsp_util:to_binary(Vsn).

@@ -139,7 +139,7 @@ send_message(_Config) ->
 -spec make_protocol_buffer(term()) -> binary().
 make_protocol_buffer(Content) ->
   Encoded = jsx:encode(Content),
-  Length = integer_to_binary(byte_size(Encoded)),
+  Length = rebar3_bsp_util:to_binary(byte_size(Encoded)),
   <<"Content-Length: ", Length/binary, "\r\n\r\n", Encoded/binary>>.
 
 ?SPEC(encode_json).

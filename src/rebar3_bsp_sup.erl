@@ -39,32 +39,6 @@ init([]) ->
               , intensity => 5
               , period    => 60
               },
-  simulate_group_leader(),
-  ChildSpecs = [ #{ id    => rebar3_bsp_stdio
-                  , start => {rebar3_bsp_stdio, start_link, []}
-                  }
-               ],
+  ChildSpecs = [],
   {ok, {SupFlags, ChildSpecs}}.
 
--spec simulate_group_leader() -> ok.
-simulate_group_leader() ->
-  GL = erlang:group_leader(),
-  application:set_env(rebar3_bsp, group_leader, GL),
-  Pid = spawn_link(fun noop_group_leader/0),
-  erlang:group_leader(Pid, self()).
-
-%% @doc Simulate a group leader but do nothing
--spec noop_group_leader() -> no_return().
-noop_group_leader() ->
-  receive
-    Message ->
-      case Message of
-        {io_request, From, ReplyAs, getopts} ->
-          From ! {io_reply, ReplyAs, []};
-        {io_request, From, ReplyAs, _} ->
-          From ! {io_reply, ReplyAs, ok};
-        _ ->
-          ok
-      end,
-      noop_group_leader()
-  end.

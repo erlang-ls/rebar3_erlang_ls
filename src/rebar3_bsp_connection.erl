@@ -2,13 +2,14 @@
 %% BSP Connection
 %%==============================================================================
 -module(rebar3_bsp_connection).
+-include("rebar3_bsp.hrl").
 
 %%==============================================================================
 %% Exports
 %%==============================================================================
 -export([ generate/1
         , discover/1
-        , exists/1
+        , version/1
         ]).
 
 %%==============================================================================
@@ -25,10 +26,9 @@
 %%==============================================================================
 %% Macro Definitions
 %%==============================================================================
--define(BSP_VSN   , <<"2.0.0">>).
 -define(NAME      , <<"rebar3">>).
 -define(LANGUAGES , [<<"erlang">>]).
--define(ARGV      , [?NAME, <<"bsp">>]).
+-define(ARGS      , [?NAME, <<"bsp">>]).
 -define(BSP_DIR   , <<".bsp">>).
 -define(FILENAME  , <<?NAME/binary, ".json">>).
 
@@ -40,37 +40,29 @@ generate(BaseDir) ->
   Path = filepath(BaseDir),
   ok = filelib:ensure_dir(Path),
   Details = jsx:encode(details(), [space, indent]),
-  ok = file:write_file(Path, Details).
+  ok = file:write_file(Path, <<Details/binary, "\n">>).
 
--spec discover(string()) -> {ok, string(), [string()], [{string(), string()}]}.
+-spec discover(string()) -> {ok, string(), [string()]}.
 discover(BaseDir) ->
   [C|_] = filelib:wildcard(filename:join([BaseDir, ".bsp", "*.json"])),
   {ok, Content} = file:read_file(C),
-  #{ argv := [Cmd|Params]
-   , env := Env0} = jsx:decode(Content, [return_maps, {labels, atom}]),
-  E = os:find_executable(binary_to_list(Cmd)),
-  Args = [binary_to_list(P) || P <- Params],
-  Env = [{atom_to_list(K), binary_to_list(V)} || {K, V} <- maps:to_list(Env0)],
-  {ok, E, Args, Env}.
-
--spec exists(string()) -> boolean().
-exists(BaseDir) ->
-  filelib:is_regular(filepath(BaseDir)).
+  #{ argv := Argv } = jsx:decode(Content, [return_maps, {labels, atom}]),
+  [Cmd|Params] = [rebar3_bsp_util:to_string(X) || X <- Argv],
+  E = os:find_executable(Cmd),
+  {ok, E, Params}.
 
 %%==============================================================================
 %% Internal Functions
 %%==============================================================================
 -spec details() -> details().
 details() ->
+  LauncherPath = filename:join([code:priv_dir(?BSP_APPLICATION), ?BSP_LAUNCHER]),
+  Launcher = rebar3_bsp_util:to_binary(LauncherPath),
   #{ name       => ?NAME
-   , version    => version()
+   , version    => version(?BSP_APPLICATION)
    , bspVersion => ?BSP_VSN
    , languages  => ?LANGUAGES
-   , argv       => ?ARGV
-     %% The `env` is a custom extension and it is not part of the
-     %% standard BSP protocol yet. See the proposal at:
-     %% https://github.com/build-server-protocol/build-server-protocol/issues/124
-   , env        => #{'QUIET' => <<"1">>}
+   , argv       => [Launcher|?ARGS]
    }.
 
 -spec filepath(file:filename()) -> file:filename().
@@ -78,7 +70,7 @@ filepath(BaseDir) ->
   Dir = filename:join([BaseDir, ?BSP_DIR]),
   filename:join([Dir, ?FILENAME]).
 
--spec version() -> binary().
-version() ->
-  {ok, Vsn} = application:get_key(rebar3_bsp, vsn),
-  list_to_binary(Vsn).
+-spec version(atom()) -> binary().
+version(Application) ->
+  {ok, Vsn} = application:get_key(Application, vsn),
+  rebar3_bsp_util:to_binary(Vsn).

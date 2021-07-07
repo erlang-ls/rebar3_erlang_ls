@@ -21,7 +21,7 @@
 %%==============================================================================
 %% Types
 %%==============================================================================
--type config() :: [{atom(), any()}].
+-type config() :: ct_suite:ct_config().
 
 %%==============================================================================
 %% CT Callbacks
@@ -30,29 +30,22 @@
 init_per_suite(Config) ->
   %% Required for the application environment to be loaded
   application:load(rebar3_bsp),
+  ok = rebar3_bsp_util:clean_sample_app_dir(),
+  rebar3_bsp_connection:generate(rebar3_bsp_util:sample_app_dir()),
   Config.
 
 -spec end_per_suite(config()) -> ok.
-end_per_suite(Config) ->
-  file:set_cwd(?config(cwd, Config)),
+end_per_suite(_Config) ->
   ok.
 
 -spec init_per_testcase(atom(), config()) -> config().
 init_per_testcase(_TestCase, Config) ->
-  {ok, Cwd} = file:get_cwd(),
-  RootPath = sample_app_dir(),
-  ok = file:set_cwd(RootPath),
-  %% Trigger an explicit compilation, so that the pre_compile hook is executed
-  %% and a symlink is created for the plugin, pointing to the same repo
-  %% TODO: Find a simpler solution
-  os:cmd("rebar3 compile"),
-  %% TODO: CT is leaking processes
-  {ok, _} = rebar3_bsp_client:start_link(RootPath),
-  [{cwd, Cwd} | Config].
+  {ok, _Pid} = rebar3_bsp_client:start_link({root, rebar3_bsp_util:sample_app_dir()}),
+  Config.
 
 -spec end_per_testcase(atom(), config()) -> ok.
 end_per_testcase(_TestCase, _Config) ->
-  rebar3_bsp_client:stop(),
+  ok = rebar3_bsp_client:stop(),
   ok.
 
 -spec all() -> [atom()].
@@ -66,21 +59,16 @@ all() ->
 %%==============================================================================
 -spec build_initialize(config()) -> ok.
 build_initialize(_Config) ->
-  Result = rebar3_bsp_client:build_initialize(#{}),
-  Expected = #{ id => 1
-              , jsonrpc => <<"2.0">>
-              , result =>
-                  #{ bspVersion => <<"2.0.0">>
-                   , capabilities => #{}
-                   , displayName => <<"rebar3_bsp">>
-                   , version => <<"0.1.0">>
-                   }},
-  ?assertEqual(Expected, Result),
+  RequestId = rebar3_bsp_client:send_request('build/initialize', #{}),
+  {ok, Result} = rebar3_bsp_client:receive_response(RequestId, 60 * 1000),
+  ?assertMatch(#{ bspVersion := <<"2.0.0">>
+                , displayName := <<"rebar3_bsp">>
+                , version := <<"0.1.0">>
+                , capabilities := #{ canReload := true
+                                   , dependencySourcesProvider := true
+                                   , compileProvider := #{ languageIds := [<<"erlang">>] }
+                                   , testProvider := #{ languageIds := [<<"erlang">>] }
+                                   }
+                }, Result),
   ok.
 
-%%==============================================================================
-%% Internal Functions
-%%==============================================================================
--spec sample_app_dir() -> file:filename().
-sample_app_dir() ->
-  filename:join([code:priv_dir(rebar3_bsp), "sample"]).

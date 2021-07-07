@@ -17,6 +17,7 @@
 %%==============================================================================
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include("rebar3_bsp.hrl").
 
 %%==============================================================================
 %% Types
@@ -28,12 +29,12 @@
 %%==============================================================================
 -spec init_per_suite(config()) -> config().
 init_per_suite(Config) ->
-  {ok, Started} = application:ensure_all_started(rebar3_bsp),
-  [{started, Started} | Config].
+  application:load(rebar3_bsp),
+  ok = rebar3_bsp_util:clean_sample_app_dir(),
+  Config.
 
 -spec end_per_suite(config()) -> ok.
-end_per_suite(Config) ->
-  [application:stop(App) || App <- ?config(started, Config)],
+end_per_suite(_Config) ->
   ok.
 
 -spec init_per_testcase(atom(), config()) -> config().
@@ -57,10 +58,9 @@ all() ->
 generate_discover(_Config) ->
   {ok, RootPath} = file:get_cwd(),
   rebar3_bsp_connection:generate(RootPath),
-  {ok, Executable, Args, Env} = rebar3_bsp_connection:discover(RootPath),
-  ?assertEqual("rebar3", filename:basename(Executable)),
-  ?assertEqual(["bsp"], Args),
-  ?assertEqual([{"QUIET", "1"}], Env),
+  {ok, Executable, Args} = rebar3_bsp_connection:discover(RootPath),
+  ?assertEqual(?BSP_LAUNCHER, filename:basename(Executable)),
+  ?assertEqual(["rebar3", "bsp"], Args),
   ok.
 
 %%==============================================================================

@@ -6,7 +6,7 @@
         , on_tc_skip/4
         ]).
 
--define(SERVER, rebar3_bsp_agent).
+-define(SERVER, rebar3_bsp_server).
 
 -type id()          :: any().
 -type options()     :: #{from := {pid(), reference()}}.
@@ -33,4 +33,5 @@ on_tc_skip(_Suite, _TestCase, {_ReasonType, Reason}, State) ->
 
 -spec send_result(reason(), state()) -> ok.
 send_result(Reason, #{options := #{from := From}}) ->
-  ?SERVER ! {result, From, Reason}.
+  ?SERVER ! {result, From, Reason},
+  ok.

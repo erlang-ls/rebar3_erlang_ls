@@ -3,8 +3,8 @@
 -export([init/1, do/1, format_error/1]).
 
 -define(PROVIDER, bsp).
--define(DEPS, [compile]).
--define(AGENT, rebar3_bsp_agent).
+-define(DEPS, []).
+-define(AGENT, rebar3_bsp_server).
 -define(NAME_PREFIX, "rebar3_bsp_").
 
 %% ===================================================================
@@ -35,7 +35,7 @@ do(State) ->
       rebar3_bsp_connection:generate(Dir);
     false ->
       setup_name(State),
-      start_agent(State)
+      start_server(State)
   end,
   {ok, State}.
 
@@ -43,30 +43,47 @@ do(State) ->
 format_error(Reason) ->
   io_lib:format("~p", [Reason]).
 
--spec start_agent(rebar_state:t()) -> no_return().
-start_agent(State) ->
-  simulate_proc_lib(),
-  true = register(?AGENT, self()),
-  {ok, GenState} = rebar3_bsp_agent:init(State),
-  gen_server:enter_loop(rebar3_bsp_agent, [], GenState, {local, ?AGENT}, hibernate).
+-spec start_server(rebar_state:t()) -> no_return().
+start_server(State) ->
+  process_flag(trap_exit, true),
+  {ok, _AppNames} = application:ensure_all_started(rebar3_bsp, permanent),
+  {ok, Pid} = supervisor:start_child(rebar3_bsp_sup, #{ id => rebar3_bsp_server
+                                                      , start => { rebar3_bsp_server
+                                                                 , start_link
+                                                                 , [State]
+                                                                 }
+                                                      , restart => temporary
+                                                      }),
+  link(Pid),
+  init ! {'EXIT', self(), normal},
+  wait_loop(Pid).
+
+-spec wait_loop(pid()) -> no_return().
+wait_loop(ServerPid) ->
+  receive
+    {'EXIT', ServerPid, Reason} ->
+      case Reason of
+        {exit_code, ExitCode} ->
+          init:stop(ExitCode);
+        _ ->
+          init:stop()
+      end;
+    _ ->
+      ok
+  end,
+  wait_loop(ServerPid).
 
 -spec setup_name(rebar_state:t()) -> ok.
 setup_name(State) ->
   {_Long, Short, Opts} = rebar_dist_utils:find_options(State),
   Name = case Short of
            undefined ->
-             list_to_atom(filename:basename(rebar_state:dir(State)));
+             rebar3_bsp_util:to_atom(filename:basename(rebar_state:dir(State)));
            N ->
              N
          end,
   Int = erlang:phash2(erlang:timestamp()),
   Id = lists:flatten(io_lib:format("~s_~p_~p", [?NAME_PREFIX, Name, Int])),
-  rebar_dist_utils:short(list_to_atom(Id), Opts),
+  rebar_dist_utils:short(rebar3_bsp_util:to_atom(Id), Opts),
   ok.
 
--spec simulate_proc_lib() -> ok.
-simulate_proc_lib() ->
-  FakeParent = spawn_link(fun() -> timer:sleep(infinity) end),
-  put('$ancestors', [FakeParent]),
-  put('$initial_call', {rebar3_bsp_agent, init, 1}),
-  ok.
